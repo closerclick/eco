@@ -1,7 +1,7 @@
 # Eco
 
 **Microblogging efímero y georreferenciado del ecosistema CloserClick.**
-Tu voz, en tu radio, bajo tus reglas. → `https://eco.closer.click/`
+Tu voz, en tu zona, bajo tus reglas. → `https://eco.closer.click/`
 
 Publicás un **eco** (texto + enlaces + tags) con tu ubicación. Quien lo tenga en
 su **radio de escucha** lo descubre por `geo.closer.click`, lo recibe en su

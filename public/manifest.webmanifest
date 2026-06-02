@@ -1,7 +1,7 @@
 {
   "name": "Eco",
   "short_name": "Eco",
-  "description": "Microblogging efímero y georreferenciado: tu voz, en tu radio, bajo tus reglas.",
+  "description": "Microblogging efímero y georreferenciado: tu voz, en tu zona, bajo tus reglas.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -8,16 +8,21 @@ const lang = (navigator.language || 'es').slice(0, 2) === 'en' ? 'en' : 'es'
 
 const T = {
   es: {
-    tagline: 'tu voz · tu radio · 24 h',
+    tagline: 'tu voz · tu zona · 24 h',
     placeholder: '¿Qué resuena cerca tuyo? (texto + enlaces)',
     composerHint: 'Los enlaces y #hashtags se detectan solos.',
     publish: 'Publicar eco', radius: 'Radio', global: 'Global',
-    sort: 'Orden', interests: 'Tus intereses', save: 'Guardar',
+    sort: 'Orden',
+    searchPh: 'Buscar ecos…  (Enter lo guarda como tema)',
+    themes: 'Temas', themesTitle: 'Tus temas',
+    themesIntro: 'Eco los aprende solo de lo que publicás y respondés; los temas suben en tu orden (preset “Temas”). Acá los agregás o quitás.',
+    addPh: 'Agregar un tema', noThemes: 'Todavía no hay temas. Publicá con #hashtags, buscá algo, o agregá uno acá.', close: 'Cerrar',
     inbox: (n) => `${n} en tu bandeja (avalados por tu red)`, accept: 'Ver', dismiss: 'Descartar',
-    reply: 'Responder', repost: 'Eco', mute: 'Silenciar', you: 'vos',
-    repostOf: 'eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu radio. Publicá el primero o ampliá el radio.',
+    reply: 'Responder', repost: 'Eco', mute: 'Silenciar', del: 'Borrar', you: 'vos', install: 'Instalar',
+    repostOf: 'eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
     standalone: 'Vault no disponible: modo archivo local (solo lectura).',
     needLoc: 'Activá la ubicación para publicar y descubrir ecos.',
+    locating: 'Obteniendo tu ubicación…', retryLoc: 'Activar ubicación',
     replyPrompt: 'Tu respuesta:'
   },
   en: {
@@ -25,28 +30,69 @@ const T = {
     placeholder: "What's echoing near you? (text + links)",
     composerHint: 'Links and #hashtags are detected automatically.',
     publish: 'Post eco', radius: 'Radius', global: 'Global',
-    sort: 'Sort', interests: 'Your interests', save: 'Save',
+    sort: 'Sort',
+    searchPh: 'Search ecos…  (Enter saves it as a topic)',
+    themes: 'Topics', themesTitle: 'Your topics',
+    themesIntro: 'Eco learns them automatically from what you post and reply to; topics rank higher (the “Topics” sort). Add or remove them here.',
+    addPh: 'Add a topic', noThemes: 'No topics yet. Post with #hashtags, search something, or add one here.', close: 'Close',
     inbox: (n) => `${n} in your inbox (endorsed by your network)`, accept: 'View', dismiss: 'Dismiss',
-    reply: 'Reply', repost: 'Echo', mute: 'Mute', you: 'you',
+    reply: 'Reply', repost: 'Echo', mute: 'Mute', del: 'Delete', you: 'you', install: 'Install',
     repostOf: 'eco by', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
     standalone: 'Vault unavailable: local-archive mode (read only).',
     needLoc: 'Enable location to post and discover ecos.',
+    locating: 'Getting your location…', retryLoc: 'Enable location',
     replyPrompt: 'Your reply:'
   }
 }
 const t = T[lang]
 
 const text = ref('')
-const interests = ref('')
+const search = ref('')
+const newInterest = ref('')
+const showThemes = ref(false)
 const now = ref(Date.now())
+const installEvt = ref(null)
 let tick
 
+// Feed visible = filtrado por el buscador (texto / tags / autor). No persiste:
+// el buscador es para encontrar ahora; al Enter se guarda como tema.
+const visibleFeed = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return feed.feed
+  return feed.feed.filter(({ eco, ctx }) =>
+    (eco.text || '').toLowerCase().includes(q) ||
+    (eco.tags || []).some((t) => t.includes(q)) ||
+    (ctx.name || '').toLowerCase().includes(q))
+})
+function commitSearch () {
+  const q = search.value.trim()
+  if (q) { feed.addInterest(q); search.value = '' }
+}
+function addInterest () {
+  const v = newInterest.value.trim()
+  if (v) { feed.addInterest(v); newInterest.value = '' }
+}
+
+function onBIP (e) { e.preventDefault(); installEvt.value = e }
+function onInstalled () { installEvt.value = null }
+async function doInstall () {
+  if (!installEvt.value) return
+  installEvt.value.prompt()
+  await installEvt.value.userChoice
+  installEvt.value = null
+}
+
 onMounted(async () => {
+  window.addEventListener('beforeinstallprompt', onBIP)
+  window.addEventListener('appinstalled', onInstalled)
   await feed.init()
-  interests.value = feed.myTags.join(', ')
   tick = setInterval(() => { now.value = Date.now() }, 30_000)
 })
-onBeforeUnmount(() => { clearInterval(tick); feed.dispose() })
+onBeforeUnmount(() => {
+  clearInterval(tick); feed.dispose()
+  window.removeEventListener('beforeinstallprompt', onBIP)
+  window.removeEventListener('appinstalled', onInstalled)
+})
 
 const canPublish = computed(() => !feed.standalone && feed.pos && text.value.trim().length > 0 && !feed.busy)
 const radiusLabel = (m) => m === 0 ? t.global : (m >= 1000 ? `${m / 1000}km` : `${m}m`)
@@ -56,8 +102,6 @@ async function doPublish () {
   const eco = await feed.publish({ text: text.value })
   if (eco) { text.value = '' }
 }
-function saveInterests () { feed.setTags(interests.value.split(',').map((s) => s.trim()).filter(Boolean)) }
-
 async function doReply (eco) {
   const r = window.prompt(t.replyPrompt)
   if (r && r.trim()) await feed.reply(eco, r.trim())
@@ -81,6 +125,7 @@ function ttlText (eco) {
       <span>Eco <small>{{ t.tagline }}</small></span>
     </div>
     <div class="spacer"></div>
+    <button v-if="installEvt" class="install-btn" @click="doInstall">⤓ {{ t.install }}</button>
     <select class="top-select" :value="feed.radiusMeters"
             @change="feed.setRadius(Number($event.target.value))" :title="t.radius">
       <option v-for="r in feed.radii" :key="r" :value="r">◎ {{ radiusLabel(r) }}</option>
@@ -89,6 +134,7 @@ function ttlText (eco) {
             @change="feed.setPreset($event.target.value)" :title="t.sort">
       <option v-for="(p, k) in feed.presets" :key="k" :value="k">↕ {{ p.label[lang] }}</option>
     </select>
+    <button class="chip" @click="showThemes = true" :title="t.themes">🏷<span v-if="feed.myTags.length"> {{ feed.myTags.length }}</span></button>
     <closer-click-support
       class="topbar-coin"
       href="https://ko-fi.com/closerclick"
@@ -98,7 +144,12 @@ function ttlText (eco) {
 
   <div class="wrap">
     <p v-if="feed.standalone" class="err">{{ t.standalone }}</p>
-    <p v-else-if="feed.geoError" class="err">{{ t.needLoc }} <small>({{ feed.geoError }})</small></p>
+    <p v-else-if="feed.locating && !feed.pos" class="muted">{{ t.locating }}</p>
+    <p v-else-if="feed.geoError" class="err">{{ t.needLoc }} <small>({{ feed.geoError }})</small>
+      <button class="chip" style="margin-left:8px" @click="feed.locate()">{{ t.retryLoc }}</button></p>
+
+    <!-- Buscador (filtra ahora; Enter lo guarda como tema) -->
+    <input class="search-box" v-model="search" :placeholder="t.searchPh" @keyup.enter="commitSearch" />
 
     <!-- Composer -->
     <div class="composer" v-if="!feed.standalone">
@@ -110,12 +161,6 @@ function ttlText (eco) {
       </div>
     </div>
 
-    <!-- Intereses -->
-    <div class="bar">
-      <input class="chip" style="flex:1;min-width:160px" v-model="interests" :placeholder="t.interests" @keyup.enter="saveInterests" />
-      <button class="chip" @click="saveInterests">{{ t.save }}</button>
-    </div>
-
     <!-- Bandeja efímera -->
     <div class="inbox-banner" v-if="feed.inbox.length">
       <span>{{ t.inbox(feed.inbox.length) }}</span>
@@ -125,12 +170,12 @@ function ttlText (eco) {
     </div>
 
     <!-- Feed -->
-    <div v-if="!feed.feed.length" class="empty">{{ t.empty }}</div>
+    <div v-if="!visibleFeed.length" class="empty">{{ t.empty }}</div>
 
-    <article v-for="item in feed.feed" :key="item.eco.id" class="eco" :class="{ mine: item.ctx.mine }">
+    <article v-for="item in visibleFeed" :key="item.eco.id" class="eco" :class="{ mine: item.ctx.mine }">
       <div class="repost-of" v-if="item.eco.repostOf">↻ {{ t.repostOf }} <span class="pk">@{{ shortPk(item.eco.repostOf.author) }}</span></div>
       <div class="eco-head">
-        <span class="pk">@{{ item.ctx.mine ? t.you : shortPk(item.eco.author) }}</span>
+        <span class="pk">{{ item.ctx.name ? '@' + item.ctx.name : '@' + shortPk(item.eco.author) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
         <span class="ttl">{{ t.expires }} {{ ttlText(item.eco) }}</span>
       </div>
       <div class="eco-body">{{ item.eco.text }}</div>
@@ -145,6 +190,30 @@ function ttlText (eco) {
         <button @click="feed.repost(item.eco)">↻ {{ t.repost }}</button>
         <button @click="feed.mute(item.eco.author)">⊘ {{ t.mute }}</button>
       </div>
+      <div class="eco-foot" v-else>
+        <button @click="feed.deleteMine(item.eco)">🗑 {{ t.del }}</button>
+      </div>
     </article>
+  </div>
+
+  <!-- Panel de temas (fuera del home) -->
+  <div v-if="showThemes" class="modal-back" @click.self="showThemes = false">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>{{ t.themesTitle }}</h3>
+        <button class="btn ghost" @click="showThemes = false">{{ t.close }}</button>
+      </div>
+      <p class="muted">{{ t.themesIntro }}</p>
+      <div class="bar">
+        <input class="chip" style="flex:1;min-width:160px" v-model="newInterest" :placeholder="t.addPh" @keyup.enter="addInterest" />
+        <button class="chip" @click="addInterest">＋</button>
+      </div>
+      <p v-if="!feed.myTags.length" class="muted">{{ t.noThemes }}</p>
+      <div class="theme-list">
+        <span v-for="tg in feed.myTags" :key="tg" class="theme-pill">
+          #{{ tg }}<button @click="feed.removeInterest(tg)">×</button>
+        </span>
+      </div>
+    </div>
   </div>
 </template>

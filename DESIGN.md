@@ -1,7 +1,7 @@
 # Eco — diseño / design
 
 > **es** · Microblogging efímero y georreferenciado del ecosistema CloserClick.
-> Tu voz, en tu radio, bajo tus reglas. Lo que la red sigue tocando sigue vivo;
+> Tu voz, en tu zona, bajo tus reglas. Lo que la red sigue tocando sigue vivo;
 > lo que nadie toca, muere a las 24 h.
 >
 > **en** · Ephemeral, georeferenced microblogging for the CloserClick ecosystem.

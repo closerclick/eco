@@ -28,6 +28,26 @@ export async function getIdentity () {
 export function getMyPubkey () { return myPubkey }
 export function isReady () { return identity !== null && !!myPubkey }
 
+// --- nombre legible desde el vault (nunca un placeholder) ---
+const nameCache = new Map() // pk → nickname|null
+
+export function getMyName () { return identity?.me?.nickname || null }
+
+/** Resuelve el nombre de un autor por su pubkey (peer book del vault). */
+export async function nameOf (pk) {
+  if (!pk) return null
+  if (pk === myPubkey) return getMyName()
+  if (nameCache.has(pk)) return nameCache.get(pk)
+  let n = null
+  try {
+    const id = await getIdentity()
+    const peer = await id?.getPeer?.(pk)
+    n = peer?.nickname || null
+  } catch (_) { /* best-effort */ }
+  nameCache.set(pk, n)
+  return n
+}
+
 // --- adaptadores para createGeoClient ---
 // El geo-client arma `data` y la firma entera; el vault devuelve
 // { signature, publickey } — tomamos sólo la firma.

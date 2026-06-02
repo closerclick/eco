@@ -37,6 +37,11 @@ a { color: var(--teal2); }
 .top-select:focus { outline: none; border-color: var(--teal); }
 .top-select option { background: var(--bg2); color: var(--text); }
 
+.install-btn {
+  background: var(--teal); color: #042024; border: none; border-radius: 999px;
+  padding: 6px 12px; font-size: 13px; font-weight: 700; white-space: nowrap;
+}
+
 .wrap { max-width: 620px; margin: 0 auto; padding: 14px; }
 
 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
@@ -47,6 +52,12 @@ a { color: var(--teal2); }
 .chip.on { color: var(--text); border-color: var(--teal); background: #123036; }
 .chip:hover { color: var(--text); }
 .muted { color: var(--muted); font-size: 13px; }
+
+.search-box {
+  width: 100%; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; padding: 10px 16px; font: inherit; margin-bottom: 12px;
+}
+.search-box:focus { outline: none; border-color: var(--teal); }
 
 .composer { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 16px; }
 .composer textarea {
@@ -84,6 +95,24 @@ a { color: var(--teal2); }
 .eco-foot button:hover { color: var(--teal2); }
 .ttl { margin-left: auto; font-size: 12px; }
 .repost-of { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
+.modal-back {
+  position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.55);
+  display: flex; align-items: flex-start; justify-content: center; padding: 8vh 14px;
+}
+.modal {
+  width: 100%; max-width: 480px; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 16px; padding: 18px;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.modal-head h3 { margin: 0; }
+.theme-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.theme-pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--teal2);
+  background: #0e2a2e; border: 1px solid var(--line); padding: 4px 6px 4px 12px; border-radius: 999px;
+}
+.theme-pill button { background: none; border: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 4px; }
+.theme-pill button:hover { color: var(--danger); }
 
 .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
 .err { color: var(--danger); font-size: 13px; }

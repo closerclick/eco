@@ -3,7 +3,7 @@
 import { defineStore } from 'pinia'
 import { v4 as uuidv4 } from 'uuid'
 import {
-  initIdentity, getMyPubkey, isReady, isContact, affinityOf, signData
+  initIdentity, getMyPubkey, isReady, isContact, affinityOf, signData, nameOf, getMyName
 } from '../services/identity'
 import { publishEco, removeEco, discover } from '../services/geo'
 import { connect as proxyConnect, onMessage, sendEcoEvent } from '../services/proxy'
@@ -24,7 +24,7 @@ export const useFeed = defineStore('feed', {
     myPubkey: null,
     pos: null,                // { lat, lng }
     geoError: null,
-    radiusMeters: 20000,
+    radiusMeters: 0,          // global por defecto
     preset: 'balanced',
     myTags: [],               // intereses para tags/discover
     posts: new Map(),         // id → eco (cache en memoria)
@@ -32,8 +32,10 @@ export const useFeed = defineStore('feed', {
     inbox: [],
     interactions: new Map(),  // authorPk → nº interacciones (afinidad)
     busy: false,
+    locating: false,
     _poll: null,
-    _off: null
+    _off: null,
+    _watch: null
   }),
 
   getters: {
@@ -44,6 +46,7 @@ export const useFeed = defineStore('feed', {
 
   actions: {
     async init () {
+      this._loadPrefs()   // radio/orden/intereses persistidos (prefs de UI)
       await initIdentity()
       this.myPubkey = getMyPubkey()
       this.standalone = !isReady()
@@ -54,27 +57,75 @@ export const useFeed = defineStore('feed', {
         await proxyConnect()
         this._off = onMessage((m) => this._onProxy(m))
       }
-      await this._locate()
-      await this.rebuild()
+      await this.rebuild()   // muestra el archivo local enseguida
       this.ready = true
-      this.startPolling()
+      this.locate()          // NO bloquea: al primer fix arranca el descubrimiento
     },
 
-    async _locate () {
-      if (!('geolocation' in navigator)) { this.geoError = 'sin geolocalización'; return }
-      try {
-        const p = await new Promise((res, rej) =>
-          navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }))
+    // Ubicación robusta: getCurrentPosition para el caso inmediato + watchPosition,
+    // que entrega la posición en cuanto el permiso pasa a "concedido" — así no hay
+    // que refrescar la página tras aceptar el prompt.
+    locate () {
+      if (!('geolocation' in navigator)) { this.geoError = 'sin geolocalización en este navegador'; return }
+      this.locating = true
+      const onPos = (p) => {
+        const first = !this.pos
         this.pos = { lat: p.coords.latitude, lng: p.coords.longitude }
         this.geoError = null
-      } catch (e) { this.geoError = e.message || 'ubicación denegada' }
+        this.locating = false
+        if (first) this.startPolling()   // dispara discoverNow dentro
+        else this.discoverNow()
+      }
+      const onErr = (e) => {
+        this.locating = false
+        if (!this.pos) this.geoError = e.code === 1 ? 'permiso de ubicación denegado' : (e.message || 'ubicación no disponible')
+      }
+      navigator.geolocation.getCurrentPosition(onPos, onErr, { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 })
+      // watch SIN timeout: queda a la espera y entrega en cuanto se concede el permiso.
+      if (this._watch == null) {
+        this._watch = navigator.geolocation.watchPosition(onPos, () => {}, { enableHighAccuracy: false, maximumAge: 30000 })
+      }
     },
 
-    setRadius (m) { this.radiusMeters = m; this.discoverNow() },
-    setPreset (p) { this.preset = p; this.rebuild() },
-    setTags (tags) {
-      this.myTags = (tags || []).map((t) => String(t).trim().toLowerCase()).filter(Boolean)
-      this.rebuild()
+    setRadius (m) { this.radiusMeters = m; this._savePrefs(); this.discoverNow() },
+    setPreset (p) { this.preset = p; this._savePrefs(); this.rebuild() },
+
+    // --- Intereses (temas que suben en tu orden) ---
+    // Se aprenden solos (al publicar/repostear/responder) y se gestionan en el
+    // panel aparte. El buscador también los genera. Cap 40, más recientes primero.
+    addInterest (tag) {
+      const t = String(tag || '').trim().toLowerCase().replace(/^#/, '')
+      if (!t) return
+      this.myTags = [t, ...this.myTags.filter((x) => x !== t)].slice(0, 40)
+      this._savePrefs(); this.rebuild()
+    },
+    removeInterest (tag) {
+      this.myTags = this.myTags.filter((x) => x !== tag)
+      this._savePrefs(); this.rebuild()
+    },
+    _learn (tags) {
+      if (!tags || !tags.length) return
+      const norm = tags.map((t) => String(t).trim().toLowerCase().replace(/^#/, '')).filter(Boolean)
+      if (!norm.length) return
+      this.myTags = [...new Set([...norm, ...this.myTags])].slice(0, 40)
+      this._savePrefs(); this.rebuild()
+    },
+
+    // Preferencias de UI persistentes (localStorage; NO contenido del usuario).
+    _loadPrefs () {
+      try {
+        const p = JSON.parse(localStorage.getItem('eco:prefs') || '{}')
+        if (RADII.includes(p.radius)) this.radiusMeters = p.radius
+        if (PRESETS[p.preset]) this.preset = p.preset
+        if (Array.isArray(p.tags)) this.myTags = p.tags
+      } catch (_) { /* prefs corruptas → defaults */ }
+    },
+    _savePrefs () {
+      try {
+        localStorage.setItem('eco:prefs', JSON.stringify({
+          radius: this.radiusMeters, preset: this.preset, tags: this.myTags
+        }))
+      } catch (_) { /* sin localStorage */ }
     },
 
     startPolling () {
@@ -106,6 +157,7 @@ export const useFeed = defineStore('feed', {
         eco.sig = (await signData(canonical(eco))) || null
         await saveMine(eco)
         this.posts.set(eco.id, eco)
+        this._learn(eco.tags)   // aprende de tus propios hashtags
         await publishEco(eco, this.pos.lat, this.pos.lng, TTL_24H)
         await this.rebuild()
         return eco
@@ -116,7 +168,11 @@ export const useFeed = defineStore('feed', {
     async discoverNow () {
       if (this.standalone || !this.pos) return
       try {
-        const pins = await discover(this.pos.lat, this.pos.lng, this.radiusMeters, this.myTags)
+        // Sin filtro duro por tags: siempre ves tu zona (capa 1). Los intereses
+        // solo afectan el ORDEN (señal tags, capa 2), no qué te llega.
+        // radio 0 = global → radio que cubre la Tierra.
+        const r = this.radiusMeters || 20_000_000
+        const pins = await discover(this.pos.lat, this.pos.lng, r)
         let changed = false
         const seenAuthors = []
         for (const pin of pins) {
@@ -142,6 +198,7 @@ export const useFeed = defineStore('feed', {
       const items = await Promise.all(alive.map(async (eco) => ({
         eco,
         ctx: {
+          name: await nameOf(eco.author),
           affinity: await affinityOf(eco.author, this.interactions.get(eco.author) || 0),
           reputation: await repOf(eco.author),
           myTags: this.myTags,
@@ -150,8 +207,9 @@ export const useFeed = defineStore('feed', {
       })))
       const ranked = rankFeed(items, this.preset, now)
       // mis ecos vivos van arriba como "tuyos", fuera del ranking
+      const myName = getMyName()
       this.feed = [
-        ...mine.sort((a, b) => b.createdAt - a.createdAt).map((eco) => ({ eco, ctx: { mine: true }, score: Infinity })),
+        ...mine.sort((a, b) => b.createdAt - a.createdAt).map((eco) => ({ eco, ctx: { mine: true, name: myName }, score: Infinity })),
         ...ranked
       ]
     },
@@ -159,12 +217,14 @@ export const useFeed = defineStore('feed', {
     // --- Reply / Repost (rehidratan el TTL del original) ---
     async reply (target, text) {
       this._bumpAffinity(target.author)
+      this._learn(target.tags)   // aprende de lo que respondés
       await sendEcoEvent(target.author, { type: 'eco-reply', refId: target.id, text: String(text).slice(0, 280) })
     },
 
     async repost (target) {
       if (this.standalone || !this.pos) return
       this._bumpAffinity(target.author)
+      this._learn(target.tags)   // aprende de lo que reposteás
       const now = Date.now()
       const eco = {
         id: uuidv4(), author: this.myPubkey, text: target.text, links: target.links || [],
@@ -221,6 +281,14 @@ export const useFeed = defineStore('feed', {
     },
     async dismissInbox () { await clearInbox(); this.inbox = [] },
 
+    // Borrar un eco propio: lo saco del feed local y retiro mi beacon del índice
+    // geo (deja de descubrirse). El archivo local append-only puede conservarlo.
+    async deleteMine (eco) {
+      this.posts.delete(eco.id)
+      try { await removeEco() } catch (_) {}
+      await this.rebuild()
+    },
+
     async mute (pk) {
       await muteAuthor(pk)
       for (const [id, eco] of this.posts) if (eco.author === pk) this.posts.delete(id)
@@ -229,16 +297,34 @@ export const useFeed = defineStore('feed', {
 
     async unpublishMine () { try { await removeEco() } catch (_) {} },
 
-    dispose () { this.stopPolling(); if (this._off) this._off() }
+    dispose () {
+      this.stopPolling()
+      if (this._off) this._off()
+      if (this._watch != null) { navigator.geolocation.clearWatch(this._watch); this._watch = null }
+    }
   }
 })
 
 // --- helpers ---
-// Enlaces: URLs http/https en el texto (quita puntuación de cierre habitual).
-const URL_RE = /\bhttps?:\/\/[^\s<>()]+/gi
+// Enlaces: URLs http/https Y dominios desnudos (closer.click, eco.closer.click/x).
+// Exige al menos un punto y un TLD de 2+ letras (no agarra "v1.2" ni "#tag").
+const URL_RE = /\b((?:https?:\/\/)?(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:\/[^\s<>()]*)?)/gi
+// Extensiones de archivo que NO son dominios (evita linkificar "index.html").
+const FILE_EXT = new Set(['html', 'htm', 'js', 'mjs', 'css', 'json', 'md', 'txt', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'pdf', 'zip', 'xml', 'yml', 'yaml', 'ts', 'vue'])
 function extractLinks (text) {
-  const found = (String(text).match(URL_RE) || []).map((u) => u.replace(/[.,;:!?]+$/, ''))
-  return [...new Set(found)].slice(0, 4)
+  const out = []
+  let m
+  while ((m = URL_RE.exec(String(text))) !== null) {
+    let u = m[1].replace(/[.,;:!?)]+$/, '')           // quita puntuación de cierre
+    const hadScheme = /^https?:\/\//i.test(u)
+    if (!hadScheme) {
+      const tld = u.split('/')[0].split('.').pop().toLowerCase()
+      if (FILE_EXT.has(tld)) continue                 // "index.html" no es un link
+      u = 'https://' + u                              // dominio desnudo → https
+    }
+    out.push(u)
+  }
+  return [...new Set(out)].slice(0, 4)
 }
 
 // Tags: #hashtag (letras/números/_ unicode), normalizados sin '#'.
