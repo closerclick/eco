@@ -29,6 +29,14 @@ a { color: var(--teal2); }
 .brand small { color: var(--muted); font-weight: 400; font-size: 12px; }
 .spacer { flex: 1; }
 
+.top-select {
+  background: var(--card); color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 10px; font-size: 13px; max-width: 122px;
+  -webkit-appearance: none; appearance: none;
+}
+.top-select:focus { outline: none; border-color: var(--teal); }
+.top-select option { background: var(--bg2); color: var(--text); }
+
 .wrap { max-width: 620px; margin: 0 auto; padding: 14px; }
 
 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }

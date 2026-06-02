@@ -85,17 +85,19 @@ export const useFeed = defineStore('feed', {
     stopPolling () { if (this._poll) { clearInterval(this._poll); this._poll = null } },
 
     // --- Publicar ---
-    async publish ({ text, links = [], tags = [] }) {
+    // Solo se introduce texto: los enlaces y tags se extraen del propio texto.
+    async publish ({ text }) {
       if (this.standalone || !this.pos) { this.geoError = 'necesitás vault y ubicación para publicar'; return null }
       this.busy = true
       try {
         const now = Date.now()
+        const body = String(text || '').slice(0, 280)
         const eco = {
           id: uuidv4(),
           author: this.myPubkey,
-          text: String(text || '').slice(0, 280),
-          links: links.filter(Boolean).slice(0, 4),
-          tags: normTags(tags),
+          text: body,
+          links: extractLinks(body),
+          tags: extractTags(body),
           lat: this.pos.lat, lng: this.pos.lng,
           createdAt: now,
           expiresAt: now + TTL_24H,
@@ -232,8 +234,20 @@ export const useFeed = defineStore('feed', {
 })
 
 // --- helpers ---
-function normTags (tags) {
-  return [...new Set((tags || []).map((t) => String(t).trim().toLowerCase().replace(/^#/, '')).filter(Boolean))].slice(0, 6)
+// Enlaces: URLs http/https en el texto (quita puntuación de cierre habitual).
+const URL_RE = /\bhttps?:\/\/[^\s<>()]+/gi
+function extractLinks (text) {
+  const found = (String(text).match(URL_RE) || []).map((u) => u.replace(/[.,;:!?]+$/, ''))
+  return [...new Set(found)].slice(0, 4)
+}
+
+// Tags: #hashtag (letras/números/_ unicode), normalizados sin '#'.
+const TAG_RE = /(?:^|[\s(])#([\p{L}\p{N}_]{1,30})/gu
+function extractTags (text) {
+  const tags = []
+  let m
+  while ((m = TAG_RE.exec(String(text))) !== null) tags.push(m[1])
+  return [...new Set(tags.map((t) => t.toLowerCase()))].slice(0, 6)
 }
 
 // Serialización canónica mínima para firmar (orden estable de claves de contenido).

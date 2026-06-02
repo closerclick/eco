@@ -10,7 +10,7 @@ const T = {
   es: {
     tagline: 'tu voz · tu radio · 24 h',
     placeholder: '¿Qué resuena cerca tuyo? (texto + enlaces)',
-    tagsHint: 'tags separados por coma (barrio, música…)', linkHint: 'enlace (opcional)',
+    composerHint: 'Los enlaces y #hashtags se detectan solos.',
     publish: 'Publicar eco', radius: 'Radio', global: 'Global',
     sort: 'Orden', interests: 'Tus intereses', save: 'Guardar',
     inbox: (n) => `${n} en tu bandeja (avalados por tu red)`, accept: 'Ver', dismiss: 'Descartar',
@@ -23,7 +23,7 @@ const T = {
   en: {
     tagline: 'your voice · your radius · 24 h',
     placeholder: "What's echoing near you? (text + links)",
-    tagsHint: 'comma-separated tags (neighborhood, music…)', linkHint: 'link (optional)',
+    composerHint: 'Links and #hashtags are detected automatically.',
     publish: 'Post eco', radius: 'Radius', global: 'Global',
     sort: 'Sort', interests: 'Your interests', save: 'Save',
     inbox: (n) => `${n} in your inbox (endorsed by your network)`, accept: 'View', dismiss: 'Dismiss',
@@ -37,8 +37,6 @@ const T = {
 const t = T[lang]
 
 const text = ref('')
-const link = ref('')
-const tagsIn = ref('')
 const interests = ref('')
 const now = ref(Date.now())
 let tick
@@ -55,10 +53,8 @@ const radiusLabel = (m) => m === 0 ? t.global : (m >= 1000 ? `${m / 1000}km` : `
 
 async function doPublish () {
   if (!canPublish.value) return
-  const tags = tagsIn.value.split(',').map((s) => s.trim()).filter(Boolean)
-  const links = link.value.trim() ? [link.value.trim()] : []
-  const eco = await feed.publish({ text: text.value, links, tags })
-  if (eco) { text.value = ''; link.value = ''; tagsIn.value = '' }
+  const eco = await feed.publish({ text: text.value })
+  if (eco) { text.value = '' }
 }
 function saveInterests () { feed.setTags(interests.value.split(',').map((s) => s.trim()).filter(Boolean)) }
 
@@ -85,6 +81,14 @@ function ttlText (eco) {
       <span>Eco <small>{{ t.tagline }}</small></span>
     </div>
     <div class="spacer"></div>
+    <select class="top-select" :value="feed.radiusMeters"
+            @change="feed.setRadius(Number($event.target.value))" :title="t.radius">
+      <option v-for="r in feed.radii" :key="r" :value="r">◎ {{ radiusLabel(r) }}</option>
+    </select>
+    <select class="top-select" :value="feed.preset"
+            @change="feed.setPreset($event.target.value)" :title="t.sort">
+      <option v-for="(p, k) in feed.presets" :key="k" :value="k">↕ {{ p.label[lang] }}</option>
+    </select>
     <closer-click-support
       class="topbar-coin"
       href="https://ko-fi.com/closerclick"
@@ -99,27 +103,11 @@ function ttlText (eco) {
     <!-- Composer -->
     <div class="composer" v-if="!feed.standalone">
       <textarea v-model="text" :maxlength="280" :placeholder="t.placeholder"></textarea>
-      <input v-model="link" :placeholder="t.linkHint" />
-      <input v-model="tagsIn" :placeholder="t.tagsHint" />
       <div class="composer-row">
-        <span class="count">{{ text.length }}/280</span>
+        <span class="count">{{ text.length }}/280 · {{ t.composerHint }}</span>
         <div class="spacer"></div>
         <button class="btn" :disabled="!canPublish" @click="doPublish">{{ t.publish }}</button>
       </div>
-    </div>
-
-    <!-- Radio -->
-    <div class="bar">
-      <span class="muted">{{ t.radius }}:</span>
-      <button v-for="r in feed.radii" :key="r" class="chip" :class="{ on: feed.radiusMeters === r }"
-              @click="feed.setRadius(r)">{{ radiusLabel(r) }}</button>
-    </div>
-
-    <!-- Orden / presets -->
-    <div class="bar">
-      <span class="muted">{{ t.sort }}:</span>
-      <button v-for="(p, k) in feed.presets" :key="k" class="chip" :class="{ on: feed.preset === k }"
-              @click="feed.setPreset(k)">{{ p.label[lang] }}</button>
     </div>
 
     <!-- Intereses -->
