@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <title>Eco · microblogging efímero y georreferenciado</title>
+  <meta name="description" content="Publicá un eco con tu ubicación; quien esté en su radio lo descubre, lo recibe y lo archiva. A las 24 h muere en la red. Tu voz, en tu radio, bajo tus reglas." />
+  <link rel="canonical" href="https://eco.closer.click/" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#0e9aa7" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Eco" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:site_name" content="Closer Click" />
+  <meta property="og:title" content="Eco · microblogging efímero y georreferenciado" />
+  <meta property="og:description" content="Tu voz, en tu radio, bajo tus reglas. Ecos que muere en la red a las 24 h y sólo sobreviven en tu archivo local." />
+  <meta property="og:url" content="https://eco.closer.click/" />
+  <meta property="og:image" content="https://eco.closer.click/og.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Eco · microblogging efímero y georreferenciado" />
+  <meta name="twitter:description" content="Tu voz, en tu radio, bajo tus reglas. Descubrimiento por geo, archivo en tu store, sin trackers." />
+  <meta name="twitter:image" content="https://eco.closer.click/og.jpg" />
+
+  <!-- JSON-LD WebApplication -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Eco",
+    "url": "https://eco.closer.click/",
+    "description": "Microblogging efímero y georreferenciado del ecosistema CloserClick: publicás un eco con tu ubicación, quien esté en su radio lo descubre y lo archiva localmente, y a las 24 h muere en la red.",
+    "applicationCategory": "SocialNetworkingApplication",
+    "operatingSystem": "Web",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "publisher": { "@type": "Organization", "name": "Closer Click", "url": "https://closer.click/" }
+  }
+  </script>
+
+  <!-- Analítica cookieless autohosteada (GoatCounter); no cuenta en localhost/LAN. -->
+  <script>window.goatcounter={path:function(p){return location.hostname+p}}</script>
+  <script data-goatcounter="https://goat.closer.click/count" async
+          src="https://goat.closer.click/count.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}))
+    }
+  </script>
+</body>
+</html>
