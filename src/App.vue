@@ -239,16 +239,18 @@ function ttlText (eco) {
     <div class="composer" v-if="!feed.standalone">
       <div v-if="composeCtx" class="compose-ctx">
         <div class="compose-ctx-head">
-          <span>{{ composeCtx.mode === 'reply' ? t.replyingTo : t.reecoOf }}
+          <span>{{ composeCtx.mode === 'reply' ? '↳ ' + t.replyingTo : '🔁 ' + t.reecoOf }}
             <span class="pk">@{{ composeCtx.eco.author === feed.myPubkey ? t.you : shortPk(composeCtx.eco.author) }}</span></span>
           <button class="ctx-x" @click="cancelCompose">✕</button>
         </div>
-        <p class="compose-ctx-quote">{{ composeCtx.eco.text }}</p>
+        <blockquote class="quoted">
+          <p>{{ composeCtx.eco.text || '—' }}</p>
+        </blockquote>
       </div>
       <textarea ref="composerEl" v-model="text" :maxlength="280"
         :placeholder="composeCtx?.mode === 'reeco' ? t.addComment : t.placeholder"></textarea>
       <div class="composer-row">
-        <span class="count">{{ text.length }}/280 · {{ t.composerHint }}</span>
+        <span class="count">{{ text.length }}/280</span>
         <div class="spacer"></div>
         <button class="btn" :disabled="!canPublish" @click="withNick(doPublish)">{{ t.publish }}</button>
       </div>
