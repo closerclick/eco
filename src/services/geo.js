@@ -26,11 +26,14 @@ export function getGeo () {
  */
 export async function publishEco (eco, lat, lng, ttlMs = TTL_24H) {
   const g = getGeo()
+  // El payload se firma vía postMessage al vault (structured clone): aplanar a
+  // objeto plano para no pasarle Proxies reactivos de Vue (DataCloneError).
+  const payload = JSON.parse(JSON.stringify(eco))
   return g.publishPin({
     lat,
     lng,
-    payload: eco,
-    tags: eco.tags || [],
+    payload,
+    tags: payload.tags || [],
     ttlMs
   })
 }
