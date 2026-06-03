@@ -26,8 +26,9 @@ const T = {
     themesIntro: 'Eco los aprende solo de lo que publicás y respondés; los temas suben en tu orden (preset “Temas”). Acá los agregás o quitás.',
     addPh: 'Agregar un tema', noThemes: 'Todavía no hay temas. Publicá con #hashtags, buscá algo, o agregá uno acá.', close: 'Cerrar',
     inbox: (n) => `${n} en tu bandeja (avalados por tu red)`, accept: 'Ver', dismiss: 'Descartar',
-    reply: 'Responder', repost: 'Re-eco', mute: 'Silenciar', del: 'Borrar',
+    reply: 'Responder', repost: 'Re-eco', mute: 'Silenciar (ocultar de tu feed)', del: 'Borrar',
     like: 'Me gusta', dislike: 'No me gusta', share: 'Compartir', kept: 'guardado',
+    mutedTitle: 'Silenciados', unmute: 'Quitar silencio',
     you: 'vos', install: 'Instalar',
     repostOf: 're-eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
     standalone: 'Vault no disponible: modo archivo local (solo lectura).',
@@ -48,8 +49,9 @@ const T = {
     themesIntro: 'Eco learns them automatically from what you post and reply to; topics rank higher (the “Topics” sort). Add or remove them here.',
     addPh: 'Add a topic', noThemes: 'No topics yet. Post with #hashtags, search something, or add one here.', close: 'Close',
     inbox: (n) => `${n} in your inbox (endorsed by your network)`, accept: 'View', dismiss: 'Dismiss',
-    reply: 'Reply', repost: 'Re-echo', mute: 'Mute', del: 'Delete',
+    reply: 'Reply', repost: 'Re-echo', mute: 'Mute (hide from your feed)', del: 'Delete',
     like: 'Like', dislike: 'Dislike', share: 'Share', kept: 'saved',
+    mutedTitle: 'Muted', unmute: 'Unmute',
     you: 'you', install: 'Install',
     repostOf: 're-echo of', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
     standalone: 'Vault unavailable: local-archive mode (read only).',
@@ -248,6 +250,8 @@ function ttlText (eco) {
         <span v-if="item.ctx.keep && isExpired(item.eco)" class="kept-tag" :title="t.kept">📌</span>
       </div>
       <div class="eco-foot" v-else>
+        <button :title="t.reply" @click="withNick(() => doReply(item.eco))">💬</button>
+        <button :title="t.repost" @click="withNick(() => feed.repost(item.eco))">🔁</button>
         <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
         <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
@@ -288,6 +292,15 @@ function ttlText (eco) {
           #{{ tg }}<button @click="feed.removeInterest(tg)">×</button>
         </span>
       </div>
+
+      <template v-if="feed.mutedList.length">
+        <h4 class="muted-head">🔕 {{ t.mutedTitle }}</h4>
+        <div class="theme-list">
+          <span v-for="pk in feed.mutedList" :key="pk" class="theme-pill">
+            @{{ shortPk(pk) }}<button @click="feed.unmute(pk)" :title="t.unmute">×</button>
+          </span>
+        </div>
+      </template>
     </div>
   </div>
 </template>

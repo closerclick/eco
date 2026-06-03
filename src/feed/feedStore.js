@@ -34,6 +34,7 @@ export const useFeed = defineStore('feed', {
     interactions: new Map(),  // authorPk → nº interacciones (afinidad)
     reactions: {},            // authorPk → net likes(+1)/dislikes(-1) (persistente)
     myReaction: {},           // ecoId → 'like' | 'dislike' (persistente, para el highlight)
+    muted: {},                // authorPk → true (mute personal persistente)
     busy: false,
     locating: false,
     _poll: null,
@@ -45,7 +46,8 @@ export const useFeed = defineStore('feed', {
     presets: () => PRESETS,
     radii: () => RADII,
     aliveCount: (s) => s.feed.length,
-    hasNick: (s) => !!s.myName
+    hasNick: (s) => !!s.myName,
+    mutedList: (s) => Object.keys(s.muted)
   },
 
   actions: {
@@ -131,13 +133,14 @@ export const useFeed = defineStore('feed', {
         if (Array.isArray(p.tags)) this.myTags = p.tags
         if (p.reactions && typeof p.reactions === 'object') this.reactions = p.reactions
         if (p.myReaction && typeof p.myReaction === 'object') this.myReaction = p.myReaction
+        if (p.muted && typeof p.muted === 'object') this.muted = p.muted
       } catch (_) { /* prefs corruptas → defaults */ }
     },
     _savePrefs () {
       try {
         localStorage.setItem('eco:prefs', JSON.stringify({
           radius: this.radiusMeters, preset: this.preset, tags: this.myTags,
-          reactions: this.reactions, myReaction: this.myReaction
+          reactions: this.reactions, myReaction: this.myReaction, muted: this.muted
         }))
       } catch (_) { /* sin localStorage */ }
     },
@@ -192,6 +195,7 @@ export const useFeed = defineStore('feed', {
         for (const pin of pins) {
           const eco = pinToEco(pin)
           if (!eco) continue
+          if (this.muted[eco.author]) continue // silenciado: no entra
           seenAuthors.push(eco.author)
           if (this.posts.has(eco.id)) continue
           this.posts.set(eco.id, eco)
@@ -208,7 +212,7 @@ export const useFeed = defineStore('feed', {
       const now = Date.now()
       // Un eco reaccionado (like/dislike) se conserva aunque haya expirado.
       const kept = (e) => isAlive(e, now) || !!this.myReaction[e.id]
-      const others = [...this.posts.values()].filter((e) => kept(e) && e.author !== this.myPubkey)
+      const others = [...this.posts.values()].filter((e) => kept(e) && e.author !== this.myPubkey && !this.muted[e.author])
       const mine = [...this.posts.values()].filter((e) => e.author === this.myPubkey && isAlive(e, now))
       // enriquecer con señales de ctx
       const items = await Promise.all(others.map(async (eco) => ({
@@ -327,10 +331,20 @@ export const useFeed = defineStore('feed', {
       await this.rebuild()
     },
 
+    // Mute PERSONAL y persistente (no es un ban global): oculta a ese autor de TU
+    // feed y no vuelve a entrar por el sondeo de geo hasta que lo quites.
     async mute (pk) {
+      if (!pk) return
+      this.muted = { ...this.muted, [pk]: true }
       await muteAuthor(pk)
       for (const [id, eco] of this.posts) if (eco.author === pk) this.posts.delete(id)
+      this._savePrefs()
       await this.rebuild()
+    },
+    async unmute (pk) {
+      const m = { ...this.muted }; delete m[pk]; this.muted = m
+      this._savePrefs()
+      await this.discoverNow() // vuelve a poder descubrir sus ecos
     },
 
     async unpublishMine () { try { await removeEco() } catch (_) {} },

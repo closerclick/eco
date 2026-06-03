@@ -132,6 +132,7 @@ a { color: var(--teal2); }
 }
 .theme-pill button { background: none; border: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 4px; }
 .theme-pill button:hover { color: var(--danger); }
+.muted-head { margin: 18px 0 0; font-size: 14px; color: var(--muted); }
 
 .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
 .err { color: var(--danger); font-size: 13px; }
