@@ -153,8 +153,10 @@ export const useFeed = defineStore('feed', {
     stopPolling () { if (this._poll) { clearInterval(this._poll); this._poll = null } },
 
     // --- Publicar ---
-    // Solo se introduce texto: los enlaces y tags se extraen del propio texto.
-    async publish ({ text }) {
+    // Solo se introduce texto (enlaces y tags se extraen del propio texto).
+    // context opcional: { mode:'reply'|'reeco', target } — reply crea un eco
+    // HERMANO (replyTo) y re-eco crea un eco que CITA al original (repostOf+quoted).
+    async publish ({ text, context = null }) {
       if (this.standalone || !this.pos) { this.geoError = 'necesitás vault y ubicación para publicar'; return null }
       this.busy = true
       try {
@@ -169,13 +171,28 @@ export const useFeed = defineStore('feed', {
           lat: this.pos.lat, lng: this.pos.lng,
           createdAt: now,
           expiresAt: now + TTL_24H,
-          repostOf: null, replyTo: null
+          repostOf: null, replyTo: null, quoted: null
+        }
+        const target = context?.target
+        if (context?.mode === 'reply' && target) {
+          eco.replyTo = { author: target.author, id: target.id, name: await nameOf(target.author) }
+        } else if (context?.mode === 'reeco' && target) {
+          eco.repostOf = { author: target.author, id: target.id }
+          eco.quoted = { // copia interna del original para mostrarlo citado
+            author: target.author, name: await nameOf(target.author),
+            text: target.text, links: target.links || [], tags: target.tags || [], createdAt: target.createdAt
+          }
         }
         eco.sig = (await signData(canonical(eco))) || null
         await saveMine(eco)
         this.posts.set(eco.id, eco)
-        this._learn(eco.tags)   // aprende de tus propios hashtags
+        this._learn(eco.tags)
+        if (target) { this._learn(target.tags); this._bumpAffinity(target.author) }
         await publishEco(eco, this.pos.lat, this.pos.lng, TTL_24H)
+        // avisar al original → rehidrata su beacon (resetea su TTL)
+        if (target && target.author !== this.myPubkey) {
+          try { await sendEcoEvent(target.author, { type: context.mode === 'reply' ? 'eco-reply' : 'eco-repost', refId: target.id }) } catch (_) {}
+        }
         await this.rebuild()
         return eco
       } finally { this.busy = false }
@@ -235,33 +252,7 @@ export const useFeed = defineStore('feed', {
       ]
     },
 
-    // --- Reply / Repost (rehidratan el TTL del original) ---
-    async reply (target, text) {
-      this._bumpAffinity(target.author)
-      this._learn(target.tags)   // aprende de lo que respondés
-      await sendEcoEvent(target.author, { type: 'eco-reply', refId: target.id, text: String(text).slice(0, 280) })
-    },
-
-    async repost (target) {
-      if (this.standalone || !this.pos) return
-      this._bumpAffinity(target.author)
-      this._learn(target.tags)   // aprende de lo que reposteás
-      const now = Date.now()
-      const eco = {
-        id: uuidv4(), author: this.myPubkey, text: target.text, links: target.links || [],
-        tags: target.tags || [], lat: this.pos.lat, lng: this.pos.lng,
-        createdAt: now, expiresAt: now + TTL_24H,
-        repostOf: { author: target.author, id: target.id }, replyTo: null
-      }
-      eco.sig = (await signData(canonical(eco))) || null
-      await saveMine(eco)
-      this.posts.set(eco.id, eco)
-      await publishEco(eco, this.pos.lat, this.pos.lng, TTL_24H)
-      // notificar al original → su cliente rehidrata su beacon
-      await sendEcoEvent(target.author, { type: 'eco-repost', refId: target.id })
-      await this.rebuild()
-    },
-
+    // Reply y re-eco se publican vía publish({ text, context }) desde el composer.
     _bumpAffinity (pk) { this.interactions.set(pk, (this.interactions.get(pk) || 0) + 1) },
 
     // --- Like / Dislike ---
@@ -392,7 +383,7 @@ function extractTags (text) {
 function canonical (eco) {
   return JSON.stringify({
     id: eco.id, author: eco.author, text: eco.text, links: eco.links,
-    tags: eco.tags, createdAt: eco.createdAt, repostOf: eco.repostOf, replyTo: eco.replyTo
+    tags: eco.tags, createdAt: eco.createdAt, repostOf: eco.repostOf, replyTo: eco.replyTo, quoted: eco.quoted
   })
 }
 

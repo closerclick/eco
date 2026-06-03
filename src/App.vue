@@ -36,7 +36,7 @@ const T = {
     locating: 'Obteniendo tu ubicación…', retryLoc: 'Activar ubicación',
     nickTitle: 'Elegí tu nombre', nickIntro: 'Tus ecos y acciones se firman con este nombre. Hace falta para participar.',
     nickPh: 'Tu nombre visible', nickSave: 'Guardar', setNick: 'Definir nombre',
-    replyPrompt: 'Tu respuesta:'
+    replyingTo: 'Respondiendo a', reecoOf: 'Re-eco de', addComment: 'Agregá un comentario (opcional)', cancel: 'Cancelar'
   },
   en: {
     tagline: 'your voice · your radius · 24 h',
@@ -59,12 +59,14 @@ const T = {
     locating: 'Getting your location…', retryLoc: 'Enable location',
     nickTitle: 'Choose your name', nickIntro: 'Your ecos and actions are signed with this name. Required to take part.',
     nickPh: 'Your visible name', nickSave: 'Save', setNick: 'Set name',
-    replyPrompt: 'Your reply:'
+    replyingTo: 'Replying to', reecoOf: 'Re-echo of', addComment: 'Add a comment (optional)', cancel: 'Cancel'
   }
 }
 const t = computed(() => T[lang.value])
 
 const text = ref('')
+const composeCtx = ref(null)   // { mode:'reply'|'reeco', eco } cuando respondés/re-ecoás
+const composerEl = ref(null)
 const search = ref('')
 const newInterest = ref('')
 const showThemes = ref(false)
@@ -131,19 +133,23 @@ onBeforeUnmount(() => {
   window.removeEventListener('appinstalled', onInstalled)
 })
 
-const canPublish = computed(() => !feed.standalone && feed.pos && text.value.trim().length > 0 && !feed.busy)
-const radiusLabel = (m) => m === 0 ? t.global : (m >= 1000 ? `${m / 1000}km` : `${m}m`)
+// Re-eco puede ir sin texto (cita sola); reply/eco normal requieren texto.
+const canPublish = computed(() => !feed.standalone && feed.pos && !feed.busy &&
+  (text.value.trim().length > 0 || composeCtx.value?.mode === 'reeco'))
+const radiusLabel = (m) => m === 0 ? t.value.global : (m >= 1000 ? `${m / 1000}km` : `${m}m`)
 
 async function doPublish () {
   if (!canPublish.value) return
-  const eco = await feed.publish({ text: text.value })
-  if (eco) { text.value = '' }
+  const context = composeCtx.value ? { mode: composeCtx.value.mode, target: composeCtx.value.eco } : null
+  const eco = await feed.publish({ text: text.value, context })
+  if (eco) { text.value = ''; composeCtx.value = null }
 }
-async function doReply (eco) {
-  const r = window.prompt(t.value.replyPrompt)
-  if (r && r.trim()) await feed.reply(eco, r.trim())
+function startCompose (mode, eco) {
+  composeCtx.value = { mode, eco }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+  setTimeout(() => composerEl.value?.focus(), 120)
 }
-
+function cancelCompose () { composeCtx.value = null }
 function doShare (eco) {
   const data = { title: 'Eco', text: eco.text, url: 'https://eco.closer.click/' }
   if (navigator.share) navigator.share(data).catch(() => {})
@@ -208,7 +214,16 @@ function ttlText (eco) {
 
     <!-- Composer -->
     <div class="composer" v-if="!feed.standalone">
-      <textarea v-model="text" :maxlength="280" :placeholder="t.placeholder"></textarea>
+      <div v-if="composeCtx" class="compose-ctx">
+        <div class="compose-ctx-head">
+          <span>{{ composeCtx.mode === 'reply' ? t.replyingTo : t.reecoOf }}
+            <span class="pk">@{{ composeCtx.eco.author === feed.myPubkey ? t.you : shortPk(composeCtx.eco.author) }}</span></span>
+          <button class="ctx-x" @click="cancelCompose">✕</button>
+        </div>
+        <p class="compose-ctx-quote">{{ composeCtx.eco.text }}</p>
+      </div>
+      <textarea ref="composerEl" v-model="text" :maxlength="280"
+        :placeholder="composeCtx?.mode === 'reeco' ? t.addComment : t.placeholder"></textarea>
       <div class="composer-row">
         <span class="count">{{ text.length }}/280 · {{ t.composerHint }}</span>
         <div class="spacer"></div>
@@ -228,12 +243,17 @@ function ttlText (eco) {
     <div v-if="!visibleFeed.length" class="empty">{{ t.empty }}</div>
 
     <article v-for="item in visibleFeed" :key="item.eco.id" class="eco" :class="{ mine: item.ctx.mine }">
-      <div class="repost-of" v-if="item.eco.repostOf">↻ {{ t.repostOf }} <span class="pk">@{{ shortPk(item.eco.repostOf.author) }}</span></div>
+      <div class="reply-to" v-if="item.eco.replyTo">↳ {{ t.replyingTo }} <span class="pk">@{{ item.eco.replyTo.name || shortPk(item.eco.replyTo.author) }}</span></div>
+      <div class="reply-to" v-else-if="item.eco.repostOf">🔁 {{ t.repostOf }} <span class="pk">@{{ item.eco.quoted?.name || shortPk(item.eco.repostOf.author) }}</span></div>
       <div class="eco-head">
         <span class="pk">{{ item.ctx.name ? '@' + item.ctx.name : '@' + shortPk(item.eco.author) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
         <span class="ttl">{{ t.expires }} {{ ttlText(item.eco) }}</span>
       </div>
-      <div class="eco-body">{{ item.eco.text }}</div>
+      <div class="eco-body" v-if="item.eco.text">{{ item.eco.text }}</div>
+      <blockquote class="quoted" v-if="item.eco.quoted">
+        <span class="pk">@{{ item.eco.quoted.name || shortPk(item.eco.quoted.author) }}</span>
+        <p>{{ item.eco.quoted.text }}</p>
+      </blockquote>
       <div class="eco-links" v-if="item.eco.links && item.eco.links.length">
         <a v-for="(l, i) in item.eco.links" :key="i" :href="l" target="_blank" rel="noopener nofollow">{{ l }}</a>
       </div>
@@ -241,8 +261,8 @@ function ttlText (eco) {
         <span class="tag" v-for="tg in item.eco.tags" :key="tg">#{{ tg }}</span>
       </div>
       <div class="eco-foot" v-if="!item.ctx.mine">
-        <button :title="t.reply" @click="withNick(() => doReply(item.eco))">💬</button>
-        <button :title="t.repost" @click="withNick(() => feed.repost(item.eco))">🔁</button>
+        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco))">💬</button>
+        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco))">🔁</button>
         <button :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="withNick(() => feed.react(item.eco, 'like'))">👍</button>
         <button :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="withNick(() => feed.react(item.eco, 'dislike'))">👎</button>
         <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
@@ -250,8 +270,8 @@ function ttlText (eco) {
         <span v-if="item.ctx.keep && isExpired(item.eco)" class="kept-tag" :title="t.kept">📌</span>
       </div>
       <div class="eco-foot" v-else>
-        <button :title="t.reply" @click="withNick(() => doReply(item.eco))">💬</button>
-        <button :title="t.repost" @click="withNick(() => feed.repost(item.eco))">🔁</button>
+        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco))">💬</button>
+        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco))">🔁</button>
         <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
         <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
