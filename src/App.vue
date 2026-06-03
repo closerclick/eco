@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { useFeed } from './feed/feedStore'
+import { createVaultProfileProvider } from '@closerclick/closer-click-profile'
+import { getIdentity } from './services/identity'
+import { getReputation } from './services/reputation'
 import iconUrl from '/icon.svg'
 
 const feed = useFeed()
@@ -209,6 +212,40 @@ const profile = computed(() => {
   }
 })
 function openProfile (pk) { profilePk.value = pk }
+
+// Tarjeta de perfil + reputación compartida (<closer-click-profile>): mismo UI
+// que el messenger, tematizado al teal de Eco vía --ccp-*. El provider cablea
+// los datos al vault + registro (singleton).
+let _profileProvider = null
+async function ensureProfileProvider () {
+  if (_profileProvider) return _profileProvider
+  try {
+    const [identity, reputation] = await Promise.all([getIdentity(), getReputation()])
+    if (reputation) _profileProvider = createVaultProfileProvider({ identity, reputation })
+  } catch (_) { /* sin provider el componente muestra "registro no disponible" */ }
+  return _profileProvider
+}
+function bindProfile (el) {
+  if (!el) return
+  ensureProfileProvider().then((p) => { if (p) el.provider = p })
+}
+const profileTheme = {
+  '--ccp-bg': 'var(--card)',
+  '--ccp-bg-2': 'var(--bg2)',
+  '--ccp-bg-3': 'var(--bg2)',
+  '--ccp-bg-4': 'var(--line)',
+  '--ccp-border': 'var(--line)',
+  '--ccp-text': 'var(--text)',
+  '--ccp-muted': 'var(--muted)',
+  '--ccp-accent': 'var(--teal)',
+  '--ccp-accent-2': 'var(--teal2)',
+  '--ccp-derived': 'var(--teal2)',
+  '--ccp-online': 'var(--teal2)',
+  '--ccp-affinity': 'var(--teal2)',
+  '--ccp-gold': '#d4a72c',
+  '--ccp-input-bg': 'var(--bg)',
+  '--ccp-radius': '12px',
+}
 // Mi etiqueta para un pk (de lo que ya está en el feed), para hilos/citas.
 function myLabelFor (pk) { return feed.feed.find((i) => i.eco.author === pk)?.ctx?.name || null }
 
@@ -446,11 +483,16 @@ function ttlText (eco) {
         <h3>@{{ displayName(profile.pk, profile.name, profile.self) }}<small v-if="profile.isMe"> · {{ t.you2 }}</small></h3>
         <button class="btn ghost" @click="profilePk = null">{{ t.close }}</button>
       </div>
-      <p class="muted" style="font-family:ui-monospace,monospace;word-break:break-all">{{ shortPk(profile.pk) }}</p>
-      <div class="profile-stats" v-if="!profile.isMe">
-        <div><span>{{ t.reputation }}</span><b>{{ Math.round(profile.reputation * 100) }}%</b></div>
-        <div><span>{{ t.affinity }}</span><b>{{ Math.round(profile.affinity * 100) }}%</b></div>
-      </div>
+      <p v-if="profile.isMe" class="muted" style="font-family:ui-monospace,monospace;word-break:break-all">{{ shortPk(profile.pk) }}</p>
+      <closer-click-profile
+        v-else
+        :ref="bindProfile"
+        :style="profileTheme"
+        mode="edit"
+        :lang="lang"
+        :pubkey="profile.pk"
+        :name="displayName(profile.pk, profile.name, profile.self)"
+      ></closer-click-profile>
       <button v-if="!profile.isMe" class="btn ghost" style="margin-top:4px"
         @click="toggleMuteProfile">🔕 {{ profile.muted ? t.unmute : t.mute0 }}</button>
       <h4 class="muted-head">{{ t.theirEcos }}</h4>

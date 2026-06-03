@@ -18,6 +18,9 @@ async function getRep () {
   return _rep
 }
 
+/** Instancia compartida de reputación (para el provider de <closer-click-profile>). */
+export async function getReputation () { return getRep() }
+
 /** reputación(pk) ∈ [0,1] ponderada por mi web-of-trust. 0 si desconocido. */
 export async function repOf (pk) {
   if (!pk) return 0
