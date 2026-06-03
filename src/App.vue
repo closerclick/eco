@@ -141,6 +141,9 @@ onMounted(async () => {
   window.addEventListener('appinstalled', onInstalled)
   navigator.serviceWorker?.addEventListener('message', onSWMessage)
   await feed.init()
+  // Sin nick: abrir el popup de nombre directo (si cancela, el guard lo reabre
+  // al intentar cualquier acción). Sin banner.
+  if (!feed.standalone && !feed.hasNick) nickPrompt.value = true
   tick = setInterval(() => { now.value = Date.now() }, 30_000)
 })
 onBeforeUnmount(() => {
@@ -257,6 +260,11 @@ async function copyShare (eco) {
   } catch (_) {}
 }
 function isExpired (eco) { return (eco.expiresAt || (eco.createdAt + 86400000)) <= now.value }
+// Fecha y hora del post (en vez de "expira en 23h").
+function fmtDate (eco) {
+  const d = new Date(eco.createdAt || Date.now())
+  return d.toLocaleString(lang.value === 'en' ? 'en-US' : 'es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
 
 const shortPk = (pk) => pk ? pk.replace(/[^a-zA-Z0-9]/g, '').slice(-6) : '??????'
 // Nombre a mostrar: MI etiqueta primero; si difiere de cómo SE identifica, su
@@ -292,8 +300,8 @@ function ttlText (eco) {
             @change="feed.setPreset($event.target.value)" :title="t.sort">
       <option v-for="(p, k) in feed.presets" :key="k" :value="k">↕ {{ p.label[lang] }}</option>
     </select>
-    <button class="chip notif-btn" @click="openNotifs" :title="t.notifications">🔔<span v-if="feed.unread" class="notif-badge">{{ feed.unread }}</span></button>
-    <button class="chip" @click="showThemes = true" :title="t.themes">🏷<span v-if="feed.myTags.length"> {{ feed.myTags.length }}</span></button>
+    <button class="chip notif-btn" data-testid="bell" @click="openNotifs" :title="t.notifications">🔔<span v-if="feed.unread" class="notif-badge" data-testid="unread">{{ feed.unread }}</span></button>
+    <button class="chip" data-testid="themes" @click="showThemes = true" :title="t.themes">🏷<span v-if="feed.myTags.length"> {{ feed.myTags.length }}</span></button>
     <div class="lang-selector" role="group" aria-label="es / en">
       <button :class="{ on: lang === 'es' }" @click="setLang('es')">ES</button>
       <button :class="{ on: lang === 'en' }" @click="setLang('en')">EN</button>
@@ -308,17 +316,12 @@ function ttlText (eco) {
 
   <div class="wrap">
     <p v-if="feed.standalone" class="err">{{ t.standalone }}</p>
-    <div v-else-if="feed.ready && !feed.hasNick" class="inbox-banner">
-      <span>{{ t.nickIntro }}</span>
-      <div class="spacer"></div>
-      <button class="btn ghost" @click="nickPrompt = true">{{ t.setNick }}</button>
-    </div>
     <p v-else-if="feed.locating && !feed.pos" class="muted">{{ t.locating }}</p>
     <p v-else-if="feed.geoError" class="err">{{ t.needLoc }} <small>({{ feed.geoError }})</small>
       <button class="chip" style="margin-left:8px" @click="feed.locate()">{{ t.retryLoc }}</button></p>
 
     <!-- Buscador (filtra ahora; Enter lo guarda como tema) -->
-    <input class="search-box" v-model="search" :placeholder="t.searchPh" @keyup.enter="commitSearch" />
+    <input class="search-box" data-testid="search" v-model="search" :placeholder="t.searchPh" @keyup.enter="commitSearch" />
 
     <!-- Composer -->
     <div class="composer" v-if="!feed.standalone">
@@ -332,12 +335,12 @@ function ttlText (eco) {
           <p>{{ composeCtx.eco.text || '—' }}</p>
         </blockquote>
       </div>
-      <textarea ref="composerEl" v-model="text" :maxlength="280"
+      <textarea ref="composerEl" v-model="text" :maxlength="280" data-testid="composer"
         :placeholder="composeCtx?.mode === 'reeco' ? t.addComment : t.placeholder"></textarea>
       <div class="composer-row">
         <span class="count">{{ text.length }}/280</span>
         <div class="spacer"></div>
-        <button class="btn" :disabled="!canPublish" @click="withNick(doPublish)">{{ t.publish }}</button>
+        <button class="btn" data-testid="post-eco" :disabled="!canPublish" @click="withNick(doPublish)">{{ t.publish }}</button>
       </div>
     </div>
 
@@ -352,12 +355,12 @@ function ttlText (eco) {
     <!-- Feed -->
     <div v-if="!visibleFeed.length" class="empty">{{ t.empty }}</div>
 
-    <article v-for="item in visibleFeed" :key="item.eco.id" class="eco" :class="{ mine: item.ctx.mine }">
+    <article v-for="item in visibleFeed" :key="item.eco.id" class="eco" :class="{ mine: item.ctx.mine }" data-testid="eco" :data-eco-id="item.eco.id" :data-author="item.eco.authorName || ''">
       <div class="reply-to" v-if="item.eco.replyTo">↳ {{ t.replyingTo }}</div>
       <div class="reply-to" v-else-if="item.eco.repostOf">🔁 {{ t.repostOf }} <span class="pk pk-link" @click="openProfile(item.eco.repostOf.author)">@{{ displayName(item.eco.repostOf.author, item.eco.quoted?.name, item.eco.quoted?.authorName) }}</span></div>
       <div class="eco-head">
         <span class="pk pk-link" @click="openProfile(item.eco.author)">@{{ displayName(item.eco.author, item.ctx.name, item.eco.authorName) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
-        <span class="ttl">{{ t.expires }} {{ ttlText(item.eco) }}</span>
+        <span class="ttl">{{ fmtDate(item.eco) }}</span>
       </div>
       <blockquote class="quoted" v-if="item.eco.replyTo && item.eco.replyTo.text" @click="openThreadById(item.eco.replyTo.id)" style="cursor:pointer">
         <span class="pk pk-link" @click.stop="openProfile(item.eco.replyTo.author)">@{{ displayName(item.eco.replyTo.author, item.eco.replyTo.name, item.eco.replyTo.authorName) }}</span>
@@ -374,20 +377,20 @@ function ttlText (eco) {
       <div class="eco-tags" v-if="item.eco.tags && item.eco.tags.length">
         <span class="tag" v-for="tg in item.eco.tags" :key="tg">#{{ tg }}</span>
       </div>
-      <button v-if="replyCountOf(item.eco.id)" class="thread-link" @click="openThread(item.eco)">💬 {{ replyCountOf(item.eco.id) }} {{ t.replies }}</button>
+      <button v-if="replyCountOf(item.eco.id)" class="thread-link" data-testid="open-thread" @click="openThread(item.eco)">💬 {{ replyCountOf(item.eco.id) }} {{ t.replies }}</button>
       <div class="eco-foot" v-if="!item.ctx.mine">
-        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco, item.ctx.name))">💬</button>
-        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco, item.ctx.name))">🔁</button>
-        <button :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="withNick(() => feed.react(item.eco, 'like'))">👍</button>
-        <button :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="withNick(() => feed.react(item.eco, 'dislike'))">👎</button>
-        <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
+        <button data-testid="act-reply" :title="t.reply" @click="withNick(() => startCompose('reply', item.eco, item.ctx.name))">💬</button>
+        <button data-testid="act-reeco" :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco, item.ctx.name))">🔁</button>
+        <button data-testid="act-like" :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="withNick(() => feed.react(item.eco, 'like'))">👍</button>
+        <button data-testid="act-dislike" :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="withNick(() => feed.react(item.eco, 'dislike'))">👎</button>
+        <button data-testid="act-share" :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
         <span v-if="item.ctx.keep && isExpired(item.eco)" class="kept-tag" :title="t.kept">📌</span>
       </div>
       <div class="eco-foot" v-else>
-        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco, item.ctx.name))">💬</button>
-        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco, item.ctx.name))">🔁</button>
-        <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
-        <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
+        <button data-testid="act-reply" :title="t.reply" @click="withNick(() => startCompose('reply', item.eco, item.ctx.name))">💬</button>
+        <button data-testid="act-reeco" :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco, item.ctx.name))">🔁</button>
+        <button data-testid="act-share" :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
+        <button data-testid="act-delete" :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
     </article>
   </div>
@@ -424,7 +427,7 @@ function ttlText (eco) {
         <div class="reply-to" v-if="e.replyTo && i > 0">↳</div>
         <div class="eco-head">
           <span class="pk pk-link" @click="openProfile(e.author)">@{{ displayName(e.author, myLabelFor(e.author), e.authorName) }}</span>
-          <span class="ttl">{{ t.expires }} {{ ttlText(e) }}</span>
+          <span class="ttl">{{ fmtDate(e) }}</span>
         </div>
         <blockquote class="quoted" v-if="e.quoted">
           <span class="pk">@{{ displayName(e.quoted.author, myLabelFor(e.quoted.author), e.quoted.authorName) }}</span>
@@ -487,10 +490,10 @@ function ttlText (eco) {
         <button class="btn ghost" @click="nickPrompt = false">{{ t.close }}</button>
       </div>
       <p class="muted">{{ t.nickIntro }}</p>
-      <input class="search-box" v-model="nickDraft" :placeholder="t.nickPh" :maxlength="40" @keyup.enter="saveNick" />
+      <input class="search-box" data-testid="nick-input" v-model="nickDraft" :placeholder="t.nickPh" :maxlength="40" @keyup.enter="saveNick" />
       <div class="composer-row">
         <div class="spacer"></div>
-        <button class="btn" :disabled="!nickDraft.trim()" @click="saveNick">{{ t.nickSave }}</button>
+        <button class="btn" data-testid="nick-save" :disabled="!nickDraft.trim()" @click="saveNick">{{ t.nickSave }}</button>
       </div>
     </div>
   </div>
