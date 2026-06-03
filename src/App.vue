@@ -31,6 +31,7 @@ const T = {
     mutedTitle: 'Silenciados', unmute: 'Quitar silencio', mute0: 'Silenciar',
     reputation: 'Reputación', affinity: 'Afinidad', theirEcos: 'Sus ecos', you2: 'Vos',
     shareHeading: 'Compartir eco', copy: 'Copiar enlace', copied: '¡Enlace copiado!',
+    replies: 'respuestas', thread: 'Conversación',
     you: 'vos', install: 'Instalar',
     repostOf: 're-eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
     standalone: 'Vault no disponible: modo archivo local (solo lectura).',
@@ -56,6 +57,7 @@ const T = {
     mutedTitle: 'Muted', unmute: 'Unmute', mute0: 'Mute',
     reputation: 'Reputation', affinity: 'Affinity', theirEcos: 'Their ecos', you2: 'You',
     shareHeading: 'Share eco', copy: 'Copy link', copied: 'Link copied!',
+    replies: 'replies', thread: 'Thread',
     you: 'you', install: 'Install',
     repostOf: 're-echo of', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
     standalone: 'Vault unavailable: local-archive mode (read only).',
@@ -194,6 +196,36 @@ const profile = computed(() => {
   }
 })
 function openProfile (pk) { profilePk.value = pk }
+// Mi etiqueta para un pk (de lo que ya está en el feed), para hilos/citas.
+function myLabelFor (pk) { return feed.feed.find((i) => i.eco.author === pk)?.ctx?.name || null }
+
+// --- Hilos: ver un mensaje con todas sus respuestas ---
+const threadRoot = ref(null)
+const replyCountOf = (id) => feed.allEcos.filter((e) => e.replyTo?.id === id).length
+function openThread (eco) { threadRoot.value = eco }
+function openThreadById (id) {
+  const e = feed.allEcos.find((x) => x.id === id)
+  threadRoot.value = e || null
+}
+const threadList = computed(() => {
+  const start = threadRoot.value
+  if (!start) return []
+  const all = feed.allEcos
+  let root = start, guard = 0
+  while (root.replyTo && guard++ < 50) {        // subir hasta la raíz del hilo
+    const parent = all.find((e) => e.id === root.replyTo.id)
+    if (!parent) break
+    root = parent
+  }
+  const result = [root]; const queue = [root.id]
+  while (queue.length) {                         // recolectar todas las respuestas (BFS)
+    const pid = queue.shift()
+    for (const e of all) {
+      if (e.replyTo?.id === pid && !result.some((x) => x.id === e.id)) { result.push(e); queue.push(e.id) }
+    }
+  }
+  return result.sort((a, b) => a.createdAt - b.createdAt)
+})
 function toggleMuteProfile () {
   const p = profile.value
   if (!p) return
@@ -302,12 +334,16 @@ function ttlText (eco) {
     <div v-if="!visibleFeed.length" class="empty">{{ t.empty }}</div>
 
     <article v-for="item in visibleFeed" :key="item.eco.id" class="eco" :class="{ mine: item.ctx.mine }">
-      <div class="reply-to" v-if="item.eco.replyTo">↳ {{ t.replyingTo }} <span class="pk pk-link" @click="openProfile(item.eco.replyTo.author)">@{{ displayName(item.eco.replyTo.author, item.eco.replyTo.name, item.eco.replyTo.authorName) }}</span></div>
+      <div class="reply-to" v-if="item.eco.replyTo">↳ {{ t.replyingTo }}</div>
       <div class="reply-to" v-else-if="item.eco.repostOf">🔁 {{ t.repostOf }} <span class="pk pk-link" @click="openProfile(item.eco.repostOf.author)">@{{ displayName(item.eco.repostOf.author, item.eco.quoted?.name, item.eco.quoted?.authorName) }}</span></div>
       <div class="eco-head">
         <span class="pk pk-link" @click="openProfile(item.eco.author)">@{{ displayName(item.eco.author, item.ctx.name, item.eco.authorName) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
         <span class="ttl">{{ t.expires }} {{ ttlText(item.eco) }}</span>
       </div>
+      <blockquote class="quoted" v-if="item.eco.replyTo && item.eco.replyTo.text" @click="openThreadById(item.eco.replyTo.id)" style="cursor:pointer">
+        <span class="pk pk-link" @click.stop="openProfile(item.eco.replyTo.author)">@{{ displayName(item.eco.replyTo.author, item.eco.replyTo.name, item.eco.replyTo.authorName) }}</span>
+        <p>{{ item.eco.replyTo.text }}</p>
+      </blockquote>
       <div class="eco-body" v-if="item.eco.text">{{ item.eco.text }}</div>
       <blockquote class="quoted" v-if="item.eco.quoted">
         <span class="pk pk-link" @click="openProfile(item.eco.quoted.author)">@{{ displayName(item.eco.quoted.author, item.eco.quoted.name, item.eco.quoted.authorName) }}</span>
@@ -319,6 +355,7 @@ function ttlText (eco) {
       <div class="eco-tags" v-if="item.eco.tags && item.eco.tags.length">
         <span class="tag" v-for="tg in item.eco.tags" :key="tg">#{{ tg }}</span>
       </div>
+      <button v-if="replyCountOf(item.eco.id)" class="thread-link" @click="openThread(item.eco)">💬 {{ replyCountOf(item.eco.id) }} {{ t.replies }}</button>
       <div class="eco-foot" v-if="!item.ctx.mine">
         <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco, item.ctx.name))">💬</button>
         <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco, item.ctx.name))">🔁</button>
@@ -334,6 +371,29 @@ function ttlText (eco) {
         <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
     </article>
+  </div>
+
+  <!-- Hilo: el mensaje con todas sus respuestas -->
+  <div v-if="threadRoot" class="modal-back" @click.self="threadRoot = null">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>{{ t.thread }}</h3>
+        <button class="btn ghost" @click="threadRoot = null">{{ t.close }}</button>
+      </div>
+      <article v-for="(e, i) in threadList" :key="e.id" class="eco thread-item" :class="{ 'thread-root': i === 0 }">
+        <div class="reply-to" v-if="e.replyTo && i > 0">↳</div>
+        <div class="eco-head">
+          <span class="pk pk-link" @click="openProfile(e.author)">@{{ displayName(e.author, myLabelFor(e.author), e.authorName) }}</span>
+          <span class="ttl">{{ t.expires }} {{ ttlText(e) }}</span>
+        </div>
+        <blockquote class="quoted" v-if="e.quoted">
+          <span class="pk">@{{ displayName(e.quoted.author, myLabelFor(e.quoted.author), e.quoted.authorName) }}</span>
+          <p>{{ e.quoted.text }}</p>
+        </blockquote>
+        <div class="eco-body" v-if="e.text">{{ e.text }}</div>
+        <button class="thread-link" @click="withNick(() => { startCompose('reply', e, myLabelFor(e.author)); threadRoot = null })">💬 {{ t.reply }}</button>
+      </article>
+    </div>
   </div>
 
   <!-- Perfil del autor (click en el nick) -->

@@ -120,6 +120,13 @@ a { color: var(--teal2); }
 .ttl { margin-left: auto; font-size: 12px; }
 .repost-of { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .reply-to { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.thread-link {
+  margin-top: 10px; background: none; border: none; color: var(--teal2);
+  font-size: 13px; padding: 2px 0; cursor: pointer;
+}
+.thread-link:hover { text-decoration: underline; }
+.thread-item { margin-top: 10px; }
+.thread-item.thread-root { border-color: var(--teal); }
 
 /* Cita del re-eco (original embebido) */
 .quoted {

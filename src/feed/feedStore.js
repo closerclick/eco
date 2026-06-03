@@ -47,7 +47,8 @@ export const useFeed = defineStore('feed', {
     radii: () => RADII,
     aliveCount: (s) => s.feed.length,
     hasNick: (s) => !!s.myName,
-    mutedList: (s) => Object.keys(s.muted)
+    mutedList: (s) => Object.keys(s.muted),
+    allEcos: (s) => [...s.posts.values()]   // para armar hilos (incluye expirados que tengamos)
   },
 
   actions: {
@@ -176,7 +177,7 @@ export const useFeed = defineStore('feed', {
         }
         const target = context?.target
         if (context?.mode === 'reply' && target) {
-          eco.replyTo = { author: target.author, id: target.id, name: await nameOf(target.author), authorName: target.authorName }
+          eco.replyTo = { author: target.author, id: target.id, name: await nameOf(target.author), authorName: target.authorName, text: target.text }
         } else if (context?.mode === 'reeco' && target) {
           eco.repostOf = { author: target.author, id: target.id }
           eco.quoted = { // copia interna del original para mostrarlo citado
