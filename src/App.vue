@@ -18,7 +18,9 @@ const T = {
     themesIntro: 'Eco los aprende solo de lo que publicás y respondés; los temas suben en tu orden (preset “Temas”). Acá los agregás o quitás.',
     addPh: 'Agregar un tema', noThemes: 'Todavía no hay temas. Publicá con #hashtags, buscá algo, o agregá uno acá.', close: 'Cerrar',
     inbox: (n) => `${n} en tu bandeja (avalados por tu red)`, accept: 'Ver', dismiss: 'Descartar',
-    reply: 'Responder', repost: 'Eco', mute: 'Silenciar', del: 'Borrar', you: 'vos', install: 'Instalar',
+    reply: 'Responder', repost: 'Eco', mute: 'Silenciar', del: 'Borrar',
+    like: 'Me gusta', dislike: 'No me gusta', share: 'Compartir', kept: 'guardado',
+    you: 'vos', install: 'Instalar',
     repostOf: 'eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
     standalone: 'Vault no disponible: modo archivo local (solo lectura).',
     needLoc: 'Activá la ubicación para publicar y descubrir ecos.',
@@ -36,7 +38,9 @@ const T = {
     themesIntro: 'Eco learns them automatically from what you post and reply to; topics rank higher (the “Topics” sort). Add or remove them here.',
     addPh: 'Add a topic', noThemes: 'No topics yet. Post with #hashtags, search something, or add one here.', close: 'Close',
     inbox: (n) => `${n} in your inbox (endorsed by your network)`, accept: 'View', dismiss: 'Dismiss',
-    reply: 'Reply', repost: 'Echo', mute: 'Mute', del: 'Delete', you: 'you', install: 'Install',
+    reply: 'Reply', repost: 'Echo', mute: 'Mute', del: 'Delete',
+    like: 'Like', dislike: 'Dislike', share: 'Share', kept: 'saved',
+    you: 'you', install: 'Install',
     repostOf: 'eco by', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
     standalone: 'Vault unavailable: local-archive mode (read only).',
     needLoc: 'Enable location to post and discover ecos.',
@@ -106,6 +110,13 @@ async function doReply (eco) {
   const r = window.prompt(t.replyPrompt)
   if (r && r.trim()) await feed.reply(eco, r.trim())
 }
+
+function doShare (eco) {
+  const data = { title: 'Eco', text: eco.text, url: 'https://eco.closer.click/' }
+  if (navigator.share) navigator.share(data).catch(() => {})
+  else window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(eco.text), '_blank', 'noopener')
+}
+function isExpired (eco) { return (eco.expiresAt || (eco.createdAt + 86400000)) <= now.value }
 
 const shortPk = (pk) => pk ? pk.replace(/[^a-zA-Z0-9]/g, '').slice(-6) : '??????'
 function ttlText (eco) {
@@ -186,12 +197,17 @@ function ttlText (eco) {
         <span class="tag" v-for="tg in item.eco.tags" :key="tg">#{{ tg }}</span>
       </div>
       <div class="eco-foot" v-if="!item.ctx.mine">
-        <button @click="doReply(item.eco)">↳ {{ t.reply }}</button>
-        <button @click="feed.repost(item.eco)">↻ {{ t.repost }}</button>
-        <button @click="feed.mute(item.eco.author)">⊘ {{ t.mute }}</button>
+        <button :title="t.reply" @click="doReply(item.eco)">💬</button>
+        <button :title="t.repost" @click="feed.repost(item.eco)">🔁</button>
+        <button :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="feed.react(item.eco, 'like')">👍</button>
+        <button :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="feed.react(item.eco, 'dislike')">👎</button>
+        <button :title="t.share" @click="doShare(item.eco)">🔗</button>
+        <button :title="t.mute" @click="feed.mute(item.eco.author)">🔕</button>
+        <span v-if="item.ctx.keep && isExpired(item.eco)" class="kept-tag" :title="t.kept">📌</span>
       </div>
       <div class="eco-foot" v-else>
-        <button @click="feed.deleteMine(item.eco)">🗑 {{ t.del }}</button>
+        <button :title="t.share" @click="doShare(item.eco)">🔗</button>
+        <button :title="t.del" @click="feed.deleteMine(item.eco)">🗑</button>
       </div>
     </article>
   </div>

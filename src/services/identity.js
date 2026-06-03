@@ -93,8 +93,9 @@ export async function isContact (pk) {
  * Afinidad subjetiva con un autor.
  * @param {string} pk pubkey
  * @param {number} interactions nº de interacciones locales (reps/replies dados)
+ * @param {number} reactionNet net de likes(+1)/dislikes(-1) que le di
  */
-export async function affinityOf (pk, interactions = 0) {
+export async function affinityOf (pk, interactions = 0, reactionNet = 0) {
   if (!pk) return 0
   if (pk === myPubkey) return 1
   let a = 0
@@ -106,5 +107,7 @@ export async function affinityOf (pk, interactions = 0) {
   } catch (_) { /* best-effort */ }
   // saturación suave por interacciones: 0..0.2
   a += 0.2 * (1 - Math.exp(-interactions / 3))
+  // like/dislike: pequeño nudge por reacción, acotado a ±0.2
+  a += Math.max(-0.2, Math.min(0.2, reactionNet * 0.05))
   return Math.max(0, Math.min(1, a))
 }

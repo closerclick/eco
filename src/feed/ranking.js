@@ -64,7 +64,7 @@ export function scoreEco (eco, ctx, presetKey, now) {
  */
 export function rankFeed (items, presetKey, now = Date.now()) {
   return items
-    .filter(({ eco }) => isAlive(eco, now))
+    .filter(({ eco, ctx }) => isAlive(eco, now) || ctx?.keep) // los reaccionados se conservan
     .map((it) => ({ ...it, score: scoreEco(it.eco, it.ctx, presetKey, now) }))
     .sort((a, b) => b.score - a.score)
 }

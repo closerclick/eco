@@ -31,6 +31,8 @@ export const useFeed = defineStore('feed', {
     feed: [],                 // [{ eco, ctx, score }]
     inbox: [],
     interactions: new Map(),  // authorPk → nº interacciones (afinidad)
+    reactions: {},            // authorPk → net likes(+1)/dislikes(-1) (persistente)
+    myReaction: {},           // ecoId → 'like' | 'dislike' (persistente, para el highlight)
     busy: false,
     locating: false,
     _poll: null,
@@ -118,12 +120,15 @@ export const useFeed = defineStore('feed', {
         if (RADII.includes(p.radius)) this.radiusMeters = p.radius
         if (PRESETS[p.preset]) this.preset = p.preset
         if (Array.isArray(p.tags)) this.myTags = p.tags
+        if (p.reactions && typeof p.reactions === 'object') this.reactions = p.reactions
+        if (p.myReaction && typeof p.myReaction === 'object') this.myReaction = p.myReaction
       } catch (_) { /* prefs corruptas → defaults */ }
     },
     _savePrefs () {
       try {
         localStorage.setItem('eco:prefs', JSON.stringify({
-          radius: this.radiusMeters, preset: this.preset, tags: this.myTags
+          radius: this.radiusMeters, preset: this.preset, tags: this.myTags,
+          reactions: this.reactions, myReaction: this.myReaction
         }))
       } catch (_) { /* sin localStorage */ }
     },
@@ -192,15 +197,19 @@ export const useFeed = defineStore('feed', {
     // --- Reconstruir el feed rankeado (capa 2) ---
     async rebuild () {
       const now = Date.now()
-      const alive = [...this.posts.values()].filter((e) => isAlive(e, now) && e.author !== this.myPubkey)
+      // Un eco reaccionado (like/dislike) se conserva aunque haya expirado.
+      const kept = (e) => isAlive(e, now) || !!this.myReaction[e.id]
+      const others = [...this.posts.values()].filter((e) => kept(e) && e.author !== this.myPubkey)
       const mine = [...this.posts.values()].filter((e) => e.author === this.myPubkey && isAlive(e, now))
       // enriquecer con señales de ctx
-      const items = await Promise.all(alive.map(async (eco) => ({
+      const items = await Promise.all(others.map(async (eco) => ({
         eco,
         ctx: {
           name: await nameOf(eco.author),
-          affinity: await affinityOf(eco.author, this.interactions.get(eco.author) || 0),
+          affinity: await affinityOf(eco.author, this.interactions.get(eco.author) || 0, this.reactions[eco.author] || 0),
           reputation: await repOf(eco.author),
+          reaction: this.myReaction[eco.id] || null,
+          keep: !!this.myReaction[eco.id],
           myTags: this.myTags,
           radiusMeters: this.radiusMeters
         }
@@ -242,6 +251,27 @@ export const useFeed = defineStore('feed', {
     },
 
     _bumpAffinity (pk) { this.interactions.set(pk, (this.interactions.get(pk) || 0) + 1) },
+
+    // --- Like / Dislike ---
+    // Nudgean la afinidad con el autor (±). Y el LIKE además persiste el eco en
+    // tu archivo local: sobrevive a la muerte de la red como copia tuya.
+    async react (eco, type) { // type: 'like' | 'dislike'
+      const id = eco.id, author = eco.author
+      if (!author || author === this.myPubkey) return
+      const prev = this.myReaction[id]
+      if (prev === 'like') this._addReaction(author, -1)
+      else if (prev === 'dislike') this._addReaction(author, +1)
+      if (prev === type) {
+        delete this.myReaction[id]          // toggle off
+      } else {
+        this.myReaction[id] = type
+        this._addReaction(author, type === 'like' ? 1 : -1)
+        await saveEco({ ...eco })           // like o dislike: persistir en local
+      }
+      this._savePrefs()
+      await this.rebuild()
+    },
+    _addReaction (pk, d) { this.reactions[pk] = (this.reactions[pk] || 0) + d },
 
     // --- Entrada por proxy (eventos dirigidos de otros) ---
     async _onProxy (msg) {

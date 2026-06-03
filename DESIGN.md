@@ -139,6 +139,11 @@ recencia), **Tu gente** (sube afinidad+reputación), **Cerca** (sube geo),
 
 - Texto + enlaces (preview local) + tags. **Sin imágenes** todavía.
 - Reply + repost, ambos rehidratan el TTL del original.
+- **Like / dislike**: nudgean (±) la afinidad local con el autor y **persisten el
+  eco en tu archivo** (sobrevive a la muerte de la red como copia tuya, marcado 📌).
+- **Compartir** a redes (Web Share API nativa; fallback a intent sin JS de terceros).
+- Acciones solo-iconos. Intereses **auto-aprendidos** (hashtags propios + lo que
+  reposteás/respondés) + buscador que los genera + panel de gestión aparte.
 - Bandeja efímera para desconocidos avalados.
 - El **lector** define su radio.
 - Presets de orden + cronológico.
