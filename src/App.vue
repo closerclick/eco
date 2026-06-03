@@ -9,9 +9,9 @@ function initialLang () {
   return (navigator.language || 'es').slice(0, 2) === 'en' ? 'en' : 'es'
 }
 const lang = ref(initialLang())
-function toggleLang () {
-  lang.value = lang.value === 'en' ? 'es' : 'en'
-  try { localStorage.setItem('eco:lang', lang.value) } catch (_) {}
+function setLang (l) {
+  lang.value = l
+  try { localStorage.setItem('eco:lang', l) } catch (_) {}
 }
 
 const T = {
@@ -178,7 +178,10 @@ function ttlText (eco) {
       <option v-for="(p, k) in feed.presets" :key="k" :value="k">↕ {{ p.label[lang] }}</option>
     </select>
     <button class="chip" @click="showThemes = true" :title="t.themes">🏷<span v-if="feed.myTags.length"> {{ feed.myTags.length }}</span></button>
-    <button class="chip" @click="toggleLang" title="es / en">{{ lang === 'es' ? 'EN' : 'ES' }}</button>
+    <div class="lang-selector" role="group" aria-label="es / en">
+      <button :class="{ on: lang === 'es' }" @click="setLang('es')">ES</button>
+      <button :class="{ on: lang === 'en' }" @click="setLang('en')">EN</button>
+    </div>
     <closer-click-support
       class="topbar-coin"
       href="https://ko-fi.com/closerclick"

@@ -48,6 +48,11 @@ a { color: var(--teal2); }
 .top-select:focus { outline: none; border-color: var(--teal); }
 .top-select option { background: var(--bg2); color: var(--text); }
 
+.lang-selector { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.lang-selector button { background: var(--card); color: var(--muted); border: none; padding: 6px 11px; font-size: 12px; font-weight: 700; }
+.lang-selector button:hover { color: var(--text); }
+.lang-selector button.on { background: var(--teal); color: #042024; }
+
 .install-btn {
   background: var(--teal); color: #042024; border: none; border-radius: 999px;
   padding: 6px 12px; font-size: 13px; font-weight: 700; white-space: nowrap;

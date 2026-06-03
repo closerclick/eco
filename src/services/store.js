@@ -16,19 +16,24 @@ export async function getStore () {
   return store
 }
 
+// El store viaja por postMessage (structured clone) al iframe del vault, que NO
+// puede clonar Proxies reactivos de Vue (DataCloneError). Aplanamos a objeto
+// plano JSON antes de mandarlo. Los ecos son JSON-safe (strings/nums/arrays/null).
+const plain = (v) => JSON.parse(JSON.stringify(v))
+
 /** Guarda/actualiza un eco bajo el thread de su autor (dedup por id). */
 export async function saveEco (eco) {
   const s = await getStore()
   const key = eco.author ? authorKey(eco.author) : MINE
   const existing = await s.listThread(key, { limit: 500 }).catch(() => [])
   if (existing.some((e) => (e.eco?.id || e.id) === eco.id)) return false
-  await s.appendMessage(key, { kind: 'eco', eco })
+  await s.appendMessage(key, plain({ kind: 'eco', eco }))
   return true
 }
 
 export async function saveMine (eco) {
   const s = await getStore()
-  await s.appendMessage(MINE, { kind: 'eco', eco })
+  await s.appendMessage(MINE, plain({ kind: 'eco', eco }))
 }
 
 /** Devuelve todos los ecos guardados (mis threads de autores + los míos). */
@@ -50,7 +55,7 @@ export async function loadAllEcos () {
 /** Bandeja efímera: eventos de desconocidos avalados pendientes de aceptar. */
 export async function pushInbox (item) {
   const s = await getStore()
-  await s.appendMessage(INBOX, item)
+  await s.appendMessage(INBOX, plain(item))
 }
 
 export async function loadInbox () {
