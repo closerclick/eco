@@ -32,8 +32,7 @@ a { color: var(--teal2); }
 @media (max-width: 560px) {
   .topbar { gap: 8px; }
   .topbar .spacer { display: none; }
-  .topbar-controls { width: 100%; justify-content: flex-start; }
-  .top-select { max-width: none; flex: 1 1 auto; }
+  .topbar-controls { width: 100%; justify-content: flex-end; }
 }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 19px; }
 .brand img { width: 28px; height: 28px; }
@@ -150,6 +149,18 @@ a { color: var(--teal2); }
 .theme-pill button { background: none; border: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 4px; }
 .theme-pill button:hover { color: var(--danger); }
 .muted-head { margin: 18px 0 0; font-size: 14px; color: var(--muted); }
+
+.share-list { display: flex; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+.share-btn {
+  width: 52px; height: 52px; border-radius: 50%; border: none; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 22px;
+  cursor: pointer; transition: transform .12s, box-shadow .12s; text-decoration: none;
+}
+.share-btn:hover { transform: translateY(-3px); box-shadow: 0 7px 18px rgba(0,0,0,0.4); }
+.share-btn svg { width: 50%; height: 50%; }
+.share-btn.copy { background: var(--line); }
+.share-copied { color: var(--teal2); font-size: 13px; margin: 10px 0 0; opacity: 0; transition: opacity .2s; }
+.share-copied.show { opacity: 1; }
 
 .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
 .err { color: var(--danger); font-size: 13px; }
