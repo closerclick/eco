@@ -38,6 +38,16 @@ export function onMessage (fn) {
   return () => handlers.delete(fn)
 }
 
+/** Activa Web Push del proxy (reusa el SW propio; requiere permiso concedido). */
+export async function enablePush () {
+  const c = await ensureConnected()
+  const id = await getIdentity()
+  const publickey = getMyPubkey()
+  if (!publickey) throw new Error('vault sin pubkey')
+  await c.enablePush({ publicKey: publickey, sign: (d) => id.signData(d) })
+  return true
+}
+
 /** Conecta e identifica de forma proactiva (para recibir aunque no publiques). */
 export async function connect () {
   try { await ensureConnected(); return true } catch (e) {

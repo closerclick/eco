@@ -1,7 +1,7 @@
 // Service worker de Eco — patrón estándar del ecosistema CloserClick.
 // Navegación (HTML): network-first con fallback a caché.
 // Resto de assets: cache-first con refresco en segundo plano.
-const CACHE = 'eco-v1'
+const CACHE = 'eco-v2'
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg']
 
 self.addEventListener('install', (e) => {
@@ -45,7 +45,21 @@ self.addEventListener('fetch', (e) => {
   )
 })
 
-// Si en el futuro Eco usa push del proxy, enfocar/abrir al clickear la notificación.
+// Web Push del proxy: despierta la app (drena su cola) y, si no hay ventana
+// visible, muestra una notificación genérica (sin contenido del usuario).
+self.addEventListener('push', (e) => {
+  e.waitUntil((async () => {
+    const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const c of cs) { try { c.postMessage({ type: 'cc-push-ring' }) } catch (_) {} }
+    const visible = cs.some((c) => c.visibilityState === 'visible')
+    if (visible) return
+    let title = 'Eco', body = 'Tenés actividad nueva'
+    try { const d = e.data && e.data.json(); if (d) { title = d.title || title; body = d.body || body } } catch (_) {}
+    await self.registration.showNotification(title, { body, icon: './icon-192.png', badge: './icon-192.png', tag: 'eco-activity' })
+  })())
+})
+
+// Enfocar/abrir al clickear la notificación.
 self.addEventListener('notificationclick', (e) => {
   e.notification.close()
   e.waitUntil(clients.matchAll({ type: 'window' }).then((cs) => {

@@ -32,6 +32,9 @@ const T = {
     reputation: 'Reputación', affinity: 'Afinidad', theirEcos: 'Sus ecos', you2: 'Vos',
     shareHeading: 'Compartir eco', copy: 'Copiar enlace', copied: '¡Enlace copiado!',
     replies: 'respuestas', thread: 'Conversación',
+    notifications: 'Notificaciones', noNotifs: 'Sin notificaciones todavía.',
+    notifReply: 'respondió a tu eco', notifRepost: 're-ecó tu eco',
+    enableNotifs: 'Activar notificaciones del sistema', notifsOn: 'Notificaciones del sistema activadas', clearN: 'Limpiar',
     you: 'vos', install: 'Instalar',
     repostOf: 're-eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
     standalone: 'Vault no disponible: modo archivo local (solo lectura).',
@@ -58,6 +61,9 @@ const T = {
     reputation: 'Reputation', affinity: 'Affinity', theirEcos: 'Their ecos', you2: 'You',
     shareHeading: 'Share eco', copy: 'Copy link', copied: 'Link copied!',
     replies: 'replies', thread: 'Thread',
+    notifications: 'Notifications', noNotifs: 'No notifications yet.',
+    notifReply: 'replied to your eco', notifRepost: 're-echoed your eco',
+    enableNotifs: 'Enable system notifications', notifsOn: 'System notifications on', clearN: 'Clear',
     you: 'you', install: 'Install',
     repostOf: 're-echo of', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
     standalone: 'Vault unavailable: local-archive mode (read only).',
@@ -76,6 +82,7 @@ const composerEl = ref(null)
 const search = ref('')
 const newInterest = ref('')
 const showThemes = ref(false)
+const showNotifs = ref(false)
 const now = ref(Date.now())
 const installEvt = ref(null)
 const nickPrompt = ref(false)
@@ -127,9 +134,12 @@ async function doInstall () {
   installEvt.value = null
 }
 
+function onSWMessage (e) { if (e.data?.type === 'cc-push-ring') feed.discoverNow?.() }
+
 onMounted(async () => {
   window.addEventListener('beforeinstallprompt', onBIP)
   window.addEventListener('appinstalled', onInstalled)
+  navigator.serviceWorker?.addEventListener('message', onSWMessage)
   await feed.init()
   tick = setInterval(() => { now.value = Date.now() }, 30_000)
 })
@@ -203,6 +213,14 @@ function myLabelFor (pk) { return feed.feed.find((i) => i.eco.author === pk)?.ct
 const threadRoot = ref(null)
 const replyCountOf = (id) => feed.allEcos.filter((e) => e.replyTo?.id === id).length
 function openThread (eco) { threadRoot.value = eco }
+
+// Notificaciones
+function openNotifs () { showNotifs.value = true; setTimeout(() => feed.markNotifsRead(), 800) }
+function openNotif (n) {
+  showNotifs.value = false
+  openThreadById(n.refId)   // refId = mi eco original → abre el hilo con la respuesta
+}
+async function enableNotifs () { await feed.enableNotifications() }
 function openThreadById (id) {
   const e = feed.allEcos.find((x) => x.id === id)
   threadRoot.value = e || null
@@ -274,6 +292,7 @@ function ttlText (eco) {
             @change="feed.setPreset($event.target.value)" :title="t.sort">
       <option v-for="(p, k) in feed.presets" :key="k" :value="k">↕ {{ p.label[lang] }}</option>
     </select>
+    <button class="chip notif-btn" @click="openNotifs" :title="t.notifications">🔔<span v-if="feed.unread" class="notif-badge">{{ feed.unread }}</span></button>
     <button class="chip" @click="showThemes = true" :title="t.themes">🏷<span v-if="feed.myTags.length"> {{ feed.myTags.length }}</span></button>
     <div class="lang-selector" role="group" aria-label="es / en">
       <button :class="{ on: lang === 'es' }" @click="setLang('es')">ES</button>
@@ -371,6 +390,27 @@ function ttlText (eco) {
         <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
     </article>
+  </div>
+
+  <!-- Notificaciones (respuestas/re-ecos a tus ecos) -->
+  <div v-if="showNotifs" class="modal-back" @click.self="showNotifs = false">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>🔔 {{ t.notifications }}</h3>
+        <button class="btn ghost" @click="showNotifs = false">{{ t.close }}</button>
+      </div>
+      <button v-if="feed.notifPermission !== 'granted'" class="btn ghost" style="margin-bottom:10px" @click="enableNotifs">{{ t.enableNotifs }}</button>
+      <p v-else class="muted" style="margin:0 0 10px">✓ {{ t.notifsOn }}</p>
+      <div v-if="!feed.notifications.length" class="muted">{{ t.noNotifs }}</div>
+      <div v-for="n in feed.notifications" :key="n.id" class="notif-item" :class="{ unread: !n.read }" @click="openNotif(n)">
+        <div class="notif-line">
+          <span class="pk">@{{ displayName(n.from, myLabelFor(n.from), n.fromName) }}</span>
+          {{ n.type === 'eco-reply' ? t.notifReply : t.notifRepost }}
+        </div>
+        <div class="notif-preview" v-if="n.preview">{{ n.preview }}</div>
+      </div>
+      <button v-if="feed.notifications.length" class="btn ghost" style="margin-top:10px" @click="feed.clearNotifs()">{{ t.clearN }}</button>
+    </div>
   </div>
 
   <!-- Hilo: el mensaje con todas sus respuestas -->

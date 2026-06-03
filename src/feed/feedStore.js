@@ -6,7 +6,7 @@ import {
   initIdentity, getMyPubkey, isReady, isContact, affinityOf, signData, nameOf, getMyName, setMyName
 } from '../services/identity'
 import { publishEco, removeEco, discover } from '../services/geo'
-import { connect as proxyConnect, onMessage, sendEcoEvent } from '../services/proxy'
+import { connect as proxyConnect, onMessage, sendEcoEvent, enablePush } from '../services/proxy'
 import {
   saveEco, saveMine, loadAllEcos, pushInbox, loadInbox, clearInbox, muteAuthor
 } from '../services/store'
@@ -35,6 +35,8 @@ export const useFeed = defineStore('feed', {
     reactions: {},            // authorPk → net likes(+1)/dislikes(-1) (persistente)
     myReaction: {},           // ecoId → 'like' | 'dislike' (persistente, para el highlight)
     muted: {},                // authorPk → true (mute personal persistente)
+    notifications: [],        // respuestas/re-ecos a MIS ecos (persistente)
+    notifPermission: 'default',
     busy: false,
     locating: false,
     _poll: null,
@@ -48,7 +50,8 @@ export const useFeed = defineStore('feed', {
     aliveCount: (s) => s.feed.length,
     hasNick: (s) => !!s.myName,
     mutedList: (s) => Object.keys(s.muted),
-    allEcos: (s) => [...s.posts.values()]   // para armar hilos (incluye expirados que tengamos)
+    allEcos: (s) => [...s.posts.values()],  // para armar hilos (incluye expirados que tengamos)
+    unread: (s) => s.notifications.filter((n) => !n.read).length
   },
 
   actions: {
@@ -64,6 +67,10 @@ export const useFeed = defineStore('feed', {
       if (!this.standalone) {
         await proxyConnect()
         this._off = onMessage((m) => this._onProxy(m))
+        if (typeof Notification !== 'undefined') {
+          this.notifPermission = Notification.permission
+          if (Notification.permission === 'granted') enablePush().catch(() => {})
+        }
       }
       await this.rebuild()   // muestra el archivo local enseguida
       this.ready = true
@@ -135,13 +142,15 @@ export const useFeed = defineStore('feed', {
         if (p.reactions && typeof p.reactions === 'object') this.reactions = p.reactions
         if (p.myReaction && typeof p.myReaction === 'object') this.myReaction = p.myReaction
         if (p.muted && typeof p.muted === 'object') this.muted = p.muted
+        if (Array.isArray(p.notifications)) this.notifications = p.notifications
       } catch (_) { /* prefs corruptas → defaults */ }
     },
     _savePrefs () {
       try {
         localStorage.setItem('eco:prefs', JSON.stringify({
           radius: this.radiusMeters, preset: this.preset, tags: this.myTags,
-          reactions: this.reactions, myReaction: this.myReaction, muted: this.muted
+          reactions: this.reactions, myReaction: this.myReaction, muted: this.muted,
+          notifications: this.notifications.slice(0, 50)
         }))
       } catch (_) { /* sin localStorage */ }
     },
@@ -191,9 +200,12 @@ export const useFeed = defineStore('feed', {
         this._learn(eco.tags)
         if (target) { this._learn(target.tags); this._bumpAffinity(target.author) }
         await publishEco(eco, this.pos.lat, this.pos.lng, TTL_24H)
-        // avisar al original → rehidrata su beacon (resetea su TTL)
+        // avisar al original por proxy → rehidrata su beacon y le notifica.
+        // Mandamos el eco (plano) para que pueda mostrar preview e ingerirlo
+        // aunque no lo descubra por geo (entrega directa al destinatario).
         if (target && target.author !== this.myPubkey) {
-          try { await sendEcoEvent(target.author, { type: context.mode === 'reply' ? 'eco-reply' : 'eco-repost', refId: target.id }) } catch (_) {}
+          const plainEco = JSON.parse(JSON.stringify(eco))
+          try { await sendEcoEvent(target.author, { type: context.mode === 'reply' ? 'eco-reply' : 'eco-repost', refId: target.id, eco: plainEco }) } catch (_) {}
         }
         await this.rebuild()
         return eco
@@ -284,29 +296,60 @@ export const useFeed = defineStore('feed', {
       if (!p || p.app !== 'eco') return
       const from = msg.fromPubkey || p.author
       const type = p.type
+      const incoming = p.eco
+      const aboutMyEco = p.refId && this.posts.get(p.refId)?.author === this.myPubkey
 
-      // ¿alguien tocó un eco mío? → rehidrato mi beacon (resetea TTL)
-      if ((type === 'eco-reply' || type === 'eco-repost') && p.refId) {
+      // ¿tocaron un eco mío? → rehidrato mi beacon (resetea TTL)
+      if ((type === 'eco-reply' || type === 'eco-repost') && aboutMyEco) {
         const mineEco = this.posts.get(p.refId)
-        if (mineEco && mineEco.author === this.myPubkey) {
-          mineEco.expiresAt = Date.now() + TTL_24H
-          if (this.pos) await publishEco(mineEco, this.pos.lat, this.pos.lng, TTL_24H)
-        }
+        mineEco.expiresAt = Date.now() + TTL_24H
+        if (this.pos) await publishEco(mineEco, this.pos.lat, this.pos.lng, TTL_24H)
       }
 
-      // gate de capa 1 para el remitente
-      if (from && from !== this.myPubkey) {
-        if (await isContact(from)) {
-          // contacto → directo
-        } else if (await isEndorsed(from)) {
-          await pushInbox({ from, type, text: p.text || '', refId: p.refId, ts: Date.now() })
+      // Gate del remitente. Si me responde a MÍ, siempre pasa (me está hablando);
+      // contacto pasa; avalado → bandeja; desconocido → descarto.
+      let allow = aboutMyEco
+      if (!allow && from && from !== this.myPubkey) {
+        if (await isContact(from)) allow = true
+        else if (await isEndorsed(from)) {
+          await pushInbox({ from, type, eco: incoming || null, refId: p.refId, ts: Date.now() })
           this.inbox = await loadInbox()
           return
-        } else {
-          return // desconocido sin aval → descartar
-        }
+        } else return
+      }
+
+      // Ingerir el eco entrante (la respuesta/re-eco en sí), aunque no llegue por geo.
+      if (incoming && incoming.id && incoming.author && incoming.author !== this.myPubkey && !this.muted[incoming.author]) {
+        if (!this.posts.has(incoming.id)) { this.posts.set(incoming.id, incoming); await saveEco(incoming) }
+      }
+
+      // Notificación si fue sobre un eco mío.
+      if (aboutMyEco && from && from !== this.myPubkey) {
+        this._notify({ type, from, fromName: incoming?.authorName || null, preview: incoming?.text || '', refId: p.refId, ecoId: incoming?.id || null })
       }
       await this.rebuild()
+    },
+
+    _notify (n) {
+      const id = (n.ecoId || n.refId || '') + ':' + n.type
+      if (this.notifications.some((x) => x.id === id)) return
+      this.notifications = [{ ...n, id, ts: Date.now(), read: false }, ...this.notifications].slice(0, 50)
+      this._savePrefs()
+    },
+    markNotifsRead () { this.notifications = this.notifications.map((n) => ({ ...n, read: true })); this._savePrefs() },
+    clearNotifs () { this.notifications = []; this._savePrefs() },
+
+    // Activar push del sistema (proxy): pide permiso y registra la subscription.
+    async enableNotifications () {
+      try {
+        if (typeof Notification === 'undefined') return false
+        let perm = Notification.permission
+        if (perm === 'default') perm = await Notification.requestPermission()
+        this.notifPermission = perm
+        if (perm !== 'granted') return false
+        await enablePush()
+        return true
+      } catch (e) { console.warn('[notif] enablePush falló', e.message); return false }
     },
 
     async acceptInbox () {

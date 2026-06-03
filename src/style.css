@@ -52,6 +52,19 @@ a { color: var(--teal2); }
 .lang-selector button:hover { color: var(--text); }
 .lang-selector button.on { background: var(--teal); color: #042024; }
 
+.notif-btn { position: relative; }
+.notif-badge {
+  position: absolute; top: -6px; right: -6px; background: var(--danger); color: #fff;
+  font-size: 11px; font-weight: 700; min-width: 17px; height: 17px; line-height: 17px;
+  border-radius: 999px; padding: 0 4px; text-align: center;
+}
+.notif-item { padding: 10px 8px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 8px; }
+.notif-item:hover { background: var(--bg2); }
+.notif-item.unread { background: #112e33; }
+.notif-line { font-size: 14px; color: var(--text); }
+.notif-preview { font-size: 13px; color: var(--muted); margin-top: 3px; white-space: pre-wrap; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
 .install-btn {
   background: var(--teal); color: #042024; border: none; border-radius: 999px;
   padding: 6px 12px; font-size: 13px; font-weight: 700; white-space: nowrap;
