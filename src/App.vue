@@ -28,7 +28,8 @@ const T = {
     inbox: (n) => `${n} en tu bandeja (avalados por tu red)`, accept: 'Ver', dismiss: 'Descartar',
     reply: 'Responder', repost: 'Re-eco', mute: 'Silenciar (ocultar de tu feed)', del: 'Borrar',
     like: 'Me gusta', dislike: 'No me gusta', share: 'Compartir', kept: 'guardado',
-    mutedTitle: 'Silenciados', unmute: 'Quitar silencio',
+    mutedTitle: 'Silenciados', unmute: 'Quitar silencio', mute0: 'Silenciar',
+    reputation: 'Reputación', affinity: 'Afinidad', theirEcos: 'Sus ecos', you2: 'Vos',
     shareHeading: 'Compartir eco', copy: 'Copiar enlace', copied: '¡Enlace copiado!',
     you: 'vos', install: 'Instalar',
     repostOf: 're-eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
@@ -52,7 +53,8 @@ const T = {
     inbox: (n) => `${n} in your inbox (endorsed by your network)`, accept: 'View', dismiss: 'Dismiss',
     reply: 'Reply', repost: 'Re-echo', mute: 'Mute (hide from your feed)', del: 'Delete',
     like: 'Like', dislike: 'Dislike', share: 'Share', kept: 'saved',
-    mutedTitle: 'Muted', unmute: 'Unmute',
+    mutedTitle: 'Muted', unmute: 'Unmute', mute0: 'Mute',
+    reputation: 'Reputation', affinity: 'Affinity', theirEcos: 'Their ecos', you2: 'You',
     shareHeading: 'Share eco', copy: 'Copy link', copied: 'Link copied!',
     you: 'you', install: 'Install',
     repostOf: 're-echo of', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
@@ -172,6 +174,31 @@ function shareTargets (eco) {
   ]
 }
 function doShare (eco) { shareCopied.value = false; shareCtx.value = eco }
+
+// Perfil de un autor (click en su nick). Datos del propio feed; mute/unmute acá.
+const profilePk = ref(null)
+const profile = computed(() => {
+  const pk = profilePk.value
+  if (!pk) return null
+  const entries = feed.feed.filter((i) => i.eco.author === pk)
+  const ctx = entries[0]?.ctx || {}
+  return {
+    pk,
+    name: ctx.name || null,
+    isMe: pk === feed.myPubkey,
+    reputation: ctx.reputation ?? 0,
+    affinity: ctx.affinity ?? 0,
+    muted: feed.mutedList.includes(pk),
+    ecos: entries.map((e) => e.eco)
+  }
+})
+function openProfile (pk) { profilePk.value = pk }
+function toggleMuteProfile () {
+  const p = profile.value
+  if (!p) return
+  if (p.muted) feed.unmute(p.pk)
+  else { feed.mute(p.pk); profilePk.value = null }
+}
 async function copyShare (eco) {
   try {
     await navigator.clipboard.writeText((eco.text ? eco.text + ' ' : '') + SHARE_URL)
@@ -271,7 +298,7 @@ function ttlText (eco) {
       <div class="reply-to" v-if="item.eco.replyTo">↳ {{ t.replyingTo }} <span class="pk">@{{ item.eco.replyTo.name || shortPk(item.eco.replyTo.author) }}</span></div>
       <div class="reply-to" v-else-if="item.eco.repostOf">🔁 {{ t.repostOf }} <span class="pk">@{{ item.eco.quoted?.name || shortPk(item.eco.repostOf.author) }}</span></div>
       <div class="eco-head">
-        <span class="pk">{{ item.ctx.name ? '@' + item.ctx.name : '@' + shortPk(item.eco.author) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
+        <span class="pk pk-link" @click="openProfile(item.eco.author)">{{ item.ctx.name ? '@' + item.ctx.name : '@' + shortPk(item.eco.author) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
         <span class="ttl">{{ t.expires }} {{ ttlText(item.eco) }}</span>
       </div>
       <div class="eco-body" v-if="item.eco.text">{{ item.eco.text }}</div>
@@ -291,7 +318,6 @@ function ttlText (eco) {
         <button :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="withNick(() => feed.react(item.eco, 'like'))">👍</button>
         <button :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="withNick(() => feed.react(item.eco, 'dislike'))">👎</button>
         <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
-        <button :title="t.mute" @click="withNick(() => feed.mute(item.eco.author))">🔕</button>
         <span v-if="item.ctx.keep && isExpired(item.eco)" class="kept-tag" :title="t.kept">📌</span>
       </div>
       <div class="eco-foot" v-else>
@@ -301,6 +327,31 @@ function ttlText (eco) {
         <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
     </article>
+  </div>
+
+  <!-- Perfil del autor (click en el nick) -->
+  <div v-if="profilePk && profile" class="modal-back" @click.self="profilePk = null">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>@{{ profile.name || shortPk(profile.pk) }}<small v-if="profile.isMe"> · {{ t.you2 }}</small></h3>
+        <button class="btn ghost" @click="profilePk = null">{{ t.close }}</button>
+      </div>
+      <p class="muted" style="font-family:ui-monospace,monospace;word-break:break-all">{{ shortPk(profile.pk) }}</p>
+      <div class="profile-stats" v-if="!profile.isMe">
+        <div><span>{{ t.reputation }}</span><b>{{ Math.round(profile.reputation * 100) }}%</b></div>
+        <div><span>{{ t.affinity }}</span><b>{{ Math.round(profile.affinity * 100) }}%</b></div>
+      </div>
+      <button v-if="!profile.isMe" class="btn ghost" style="margin-top:4px"
+        @click="toggleMuteProfile">🔕 {{ profile.muted ? t.unmute : t.mute0 }}</button>
+      <h4 class="muted-head">{{ t.theirEcos }}</h4>
+      <div v-if="!profile.ecos.length" class="muted">—</div>
+      <article v-for="e in profile.ecos" :key="e.id" class="eco" style="margin-top:8px">
+        <div class="eco-body" v-if="e.text">{{ e.text }}</div>
+        <div class="eco-tags" v-if="e.tags && e.tags.length">
+          <span class="tag" v-for="tg in e.tags" :key="tg">#{{ tg }}</span>
+        </div>
+      </article>
+    </div>
   </div>
 
   <!-- Compartir: modal coherente con el set de support (WhatsApp/X/Facebook) -->

@@ -101,6 +101,12 @@ a { color: var(--teal2); }
 .eco.mine { border-color: #1f4a44; }
 .eco-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 .pk { font-family: ui-monospace, monospace; color: var(--teal2); }
+.pk-link { cursor: pointer; }
+.pk-link:hover { text-decoration: underline; }
+.profile-stats { display: flex; gap: 22px; margin: 12px 0; }
+.profile-stats div { display: flex; flex-direction: column; }
+.profile-stats span { font-size: 12px; color: var(--muted); }
+.profile-stats b { font-size: 20px; color: var(--teal2); }
 .eco-body { white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
 .eco-links a { display: inline-block; margin-top: 6px; font-size: 13px; word-break: break-all; }
 .eco-tags { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
