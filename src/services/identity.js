@@ -33,6 +33,15 @@ const nameCache = new Map() // pk → nickname|null
 
 export function getMyName () { return identity?.me?.nickname || null }
 
+/** Define mi nombre visible en el vault (firma mis ecos). Devuelve true si ok. */
+export async function setMyName (name) {
+  const id = await getIdentity()
+  if (!id) return false
+  const n = String(name || '').trim()
+  if (!n) return false
+  try { await id.setMyNickname(n); return !!getMyName() } catch (_) { return false }
+}
+
 /** Resuelve el nombre de un autor por su pubkey (peer book del vault). */
 export async function nameOf (pk) {
   if (!pk) return null

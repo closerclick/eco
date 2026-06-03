@@ -4,12 +4,20 @@ import { useFeed } from './feed/feedStore'
 import iconUrl from '/icon.svg'
 
 const feed = useFeed()
-const lang = (navigator.language || 'es').slice(0, 2) === 'en' ? 'en' : 'es'
+function initialLang () {
+  try { const s = localStorage.getItem('eco:lang'); if (s === 'es' || s === 'en') return s } catch (_) {}
+  return (navigator.language || 'es').slice(0, 2) === 'en' ? 'en' : 'es'
+}
+const lang = ref(initialLang())
+function toggleLang () {
+  lang.value = lang.value === 'en' ? 'es' : 'en'
+  try { localStorage.setItem('eco:lang', lang.value) } catch (_) {}
+}
 
 const T = {
   es: {
     tagline: 'tu voz · tu zona · 24 h',
-    placeholder: '¿Qué resuena cerca tuyo? (texto + enlaces)',
+    placeholder: '¿Qué resuena cerca tuyo?',
     composerHint: 'Los enlaces y #hashtags se detectan solos.',
     publish: 'Publicar eco', radius: 'Radio', global: 'Global',
     sort: 'Orden',
@@ -18,18 +26,20 @@ const T = {
     themesIntro: 'Eco los aprende solo de lo que publicás y respondés; los temas suben en tu orden (preset “Temas”). Acá los agregás o quitás.',
     addPh: 'Agregar un tema', noThemes: 'Todavía no hay temas. Publicá con #hashtags, buscá algo, o agregá uno acá.', close: 'Cerrar',
     inbox: (n) => `${n} en tu bandeja (avalados por tu red)`, accept: 'Ver', dismiss: 'Descartar',
-    reply: 'Responder', repost: 'Eco', mute: 'Silenciar', del: 'Borrar',
+    reply: 'Responder', repost: 'Re-eco', mute: 'Silenciar', del: 'Borrar',
     like: 'Me gusta', dislike: 'No me gusta', share: 'Compartir', kept: 'guardado',
     you: 'vos', install: 'Instalar',
-    repostOf: 'eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
+    repostOf: 're-eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publicá el primero o ampliá el alcance.',
     standalone: 'Vault no disponible: modo archivo local (solo lectura).',
     needLoc: 'Activá la ubicación para publicar y descubrir ecos.',
     locating: 'Obteniendo tu ubicación…', retryLoc: 'Activar ubicación',
+    nickTitle: 'Elegí tu nombre', nickIntro: 'Tus ecos y acciones se firman con este nombre. Hace falta para participar.',
+    nickPh: 'Tu nombre visible', nickSave: 'Guardar', setNick: 'Definir nombre',
     replyPrompt: 'Tu respuesta:'
   },
   en: {
     tagline: 'your voice · your radius · 24 h',
-    placeholder: "What's echoing near you? (text + links)",
+    placeholder: "What's echoing near you?",
     composerHint: 'Links and #hashtags are detected automatically.',
     publish: 'Post eco', radius: 'Radius', global: 'Global',
     sort: 'Sort',
@@ -38,17 +48,19 @@ const T = {
     themesIntro: 'Eco learns them automatically from what you post and reply to; topics rank higher (the “Topics” sort). Add or remove them here.',
     addPh: 'Add a topic', noThemes: 'No topics yet. Post with #hashtags, search something, or add one here.', close: 'Close',
     inbox: (n) => `${n} in your inbox (endorsed by your network)`, accept: 'View', dismiss: 'Dismiss',
-    reply: 'Reply', repost: 'Echo', mute: 'Mute', del: 'Delete',
+    reply: 'Reply', repost: 'Re-echo', mute: 'Mute', del: 'Delete',
     like: 'Like', dislike: 'Dislike', share: 'Share', kept: 'saved',
     you: 'you', install: 'Install',
-    repostOf: 'eco by', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
+    repostOf: 're-echo of', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
     standalone: 'Vault unavailable: local-archive mode (read only).',
     needLoc: 'Enable location to post and discover ecos.',
     locating: 'Getting your location…', retryLoc: 'Enable location',
+    nickTitle: 'Choose your name', nickIntro: 'Your ecos and actions are signed with this name. Required to take part.',
+    nickPh: 'Your visible name', nickSave: 'Save', setNick: 'Set name',
     replyPrompt: 'Your reply:'
   }
 }
-const t = T[lang]
+const t = computed(() => T[lang.value])
 
 const text = ref('')
 const search = ref('')
@@ -56,7 +68,26 @@ const newInterest = ref('')
 const showThemes = ref(false)
 const now = ref(Date.now())
 const installEvt = ref(null)
+const nickPrompt = ref(false)
+const nickDraft = ref('')
+let pendingAction = null
 let tick
+
+// Guard central: ninguna acción sin nick. Abre el prompt y reanuda la acción.
+function withNick (fn) {
+  if (feed.hasNick) return fn()
+  pendingAction = fn
+  nickPrompt.value = true
+}
+async function saveNick () {
+  if (!nickDraft.value.trim()) return
+  const ok = await feed.setMyName(nickDraft.value)
+  if (!ok) return
+  nickPrompt.value = false
+  nickDraft.value = ''
+  const a = pendingAction; pendingAction = null
+  if (a) await a()
+}
 
 // Feed visible = filtrado por el buscador (texto / tags / autor). No persiste:
 // el buscador es para encontrar ahora; al Enter se guarda como tema.
@@ -107,7 +138,7 @@ async function doPublish () {
   if (eco) { text.value = '' }
 }
 async function doReply (eco) {
-  const r = window.prompt(t.replyPrompt)
+  const r = window.prompt(t.value.replyPrompt)
   if (r && r.trim()) await feed.reply(eco, r.trim())
 }
 
@@ -136,6 +167,7 @@ function ttlText (eco) {
       <span>Eco <small>{{ t.tagline }}</small></span>
     </div>
     <div class="spacer"></div>
+    <div class="topbar-controls">
     <button v-if="installEvt" class="install-btn" @click="doInstall">⤓ {{ t.install }}</button>
     <select class="top-select" :value="feed.radiusMeters"
             @change="feed.setRadius(Number($event.target.value))" :title="t.radius">
@@ -146,15 +178,22 @@ function ttlText (eco) {
       <option v-for="(p, k) in feed.presets" :key="k" :value="k">↕ {{ p.label[lang] }}</option>
     </select>
     <button class="chip" @click="showThemes = true" :title="t.themes">🏷<span v-if="feed.myTags.length"> {{ feed.myTags.length }}</span></button>
+    <button class="chip" @click="toggleLang" title="es / en">{{ lang === 'es' ? 'EN' : 'ES' }}</button>
     <closer-click-support
       class="topbar-coin"
       href="https://ko-fi.com/closerclick"
       repo="closerclick/eco"
       discord="https://discord.gg/D648uq7cth"></closer-click-support>
+    </div>
   </div>
 
   <div class="wrap">
     <p v-if="feed.standalone" class="err">{{ t.standalone }}</p>
+    <div v-else-if="feed.ready && !feed.hasNick" class="inbox-banner">
+      <span>{{ t.nickIntro }}</span>
+      <div class="spacer"></div>
+      <button class="btn ghost" @click="nickPrompt = true">{{ t.setNick }}</button>
+    </div>
     <p v-else-if="feed.locating && !feed.pos" class="muted">{{ t.locating }}</p>
     <p v-else-if="feed.geoError" class="err">{{ t.needLoc }} <small>({{ feed.geoError }})</small>
       <button class="chip" style="margin-left:8px" @click="feed.locate()">{{ t.retryLoc }}</button></p>
@@ -168,7 +207,7 @@ function ttlText (eco) {
       <div class="composer-row">
         <span class="count">{{ text.length }}/280 · {{ t.composerHint }}</span>
         <div class="spacer"></div>
-        <button class="btn" :disabled="!canPublish" @click="doPublish">{{ t.publish }}</button>
+        <button class="btn" :disabled="!canPublish" @click="withNick(doPublish)">{{ t.publish }}</button>
       </div>
     </div>
 
@@ -197,19 +236,35 @@ function ttlText (eco) {
         <span class="tag" v-for="tg in item.eco.tags" :key="tg">#{{ tg }}</span>
       </div>
       <div class="eco-foot" v-if="!item.ctx.mine">
-        <button :title="t.reply" @click="doReply(item.eco)">💬</button>
-        <button :title="t.repost" @click="feed.repost(item.eco)">🔁</button>
-        <button :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="feed.react(item.eco, 'like')">👍</button>
-        <button :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="feed.react(item.eco, 'dislike')">👎</button>
-        <button :title="t.share" @click="doShare(item.eco)">🔗</button>
-        <button :title="t.mute" @click="feed.mute(item.eco.author)">🔕</button>
+        <button :title="t.reply" @click="withNick(() => doReply(item.eco))">💬</button>
+        <button :title="t.repost" @click="withNick(() => feed.repost(item.eco))">🔁</button>
+        <button :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="withNick(() => feed.react(item.eco, 'like'))">👍</button>
+        <button :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="withNick(() => feed.react(item.eco, 'dislike'))">👎</button>
+        <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
+        <button :title="t.mute" @click="withNick(() => feed.mute(item.eco.author))">🔕</button>
         <span v-if="item.ctx.keep && isExpired(item.eco)" class="kept-tag" :title="t.kept">📌</span>
       </div>
       <div class="eco-foot" v-else>
-        <button :title="t.share" @click="doShare(item.eco)">🔗</button>
-        <button :title="t.del" @click="feed.deleteMine(item.eco)">🗑</button>
+        <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
+        <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
     </article>
+  </div>
+
+  <!-- Prompt de nick: ninguna acción sin nombre -->
+  <div v-if="nickPrompt" class="modal-back" @click.self="nickPrompt = false">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>{{ t.nickTitle }}</h3>
+        <button class="btn ghost" @click="nickPrompt = false">{{ t.close }}</button>
+      </div>
+      <p class="muted">{{ t.nickIntro }}</p>
+      <input class="search-box" v-model="nickDraft" :placeholder="t.nickPh" :maxlength="40" @keyup.enter="saveNick" />
+      <div class="composer-row">
+        <div class="spacer"></div>
+        <button class="btn" :disabled="!nickDraft.trim()" @click="saveNick">{{ t.nickSave }}</button>
+      </div>
+    </div>
   </div>
 
   <!-- Panel de temas (fuera del home) -->

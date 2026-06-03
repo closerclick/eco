@@ -3,7 +3,7 @@
 import { defineStore } from 'pinia'
 import { v4 as uuidv4 } from 'uuid'
 import {
-  initIdentity, getMyPubkey, isReady, isContact, affinityOf, signData, nameOf, getMyName
+  initIdentity, getMyPubkey, isReady, isContact, affinityOf, signData, nameOf, getMyName, setMyName
 } from '../services/identity'
 import { publishEco, removeEco, discover } from '../services/geo'
 import { connect as proxyConnect, onMessage, sendEcoEvent } from '../services/proxy'
@@ -22,6 +22,7 @@ export const useFeed = defineStore('feed', {
     ready: false,
     standalone: false,        // vault inalcanzable: modo solo-lectura local
     myPubkey: null,
+    myName: null,             // nick del vault (espejo reactivo)
     pos: null,                // { lat, lng }
     geoError: null,
     radiusMeters: 0,          // global por defecto
@@ -43,7 +44,8 @@ export const useFeed = defineStore('feed', {
   getters: {
     presets: () => PRESETS,
     radii: () => RADII,
-    aliveCount: (s) => s.feed.length
+    aliveCount: (s) => s.feed.length,
+    hasNick: (s) => !!s.myName
   },
 
   actions: {
@@ -51,6 +53,7 @@ export const useFeed = defineStore('feed', {
       this._loadPrefs()   // radio/orden/intereses persistidos (prefs de UI)
       await initIdentity()
       this.myPubkey = getMyPubkey()
+      this.myName = getMyName()
       this.standalone = !isReady()
       // cargar archivo local primero (funciona aunque no haya red)
       for (const eco of await loadAllEcos()) this.posts.set(eco.id, eco)
@@ -87,6 +90,12 @@ export const useFeed = defineStore('feed', {
       if (this._watch == null) {
         this._watch = navigator.geolocation.watchPosition(onPos, () => {}, { enableHighAccuracy: false, maximumAge: 30000 })
       }
+    },
+
+    async setMyName (name) {
+      const ok = await setMyName(name)
+      if (ok) { this.myName = getMyName(); await this.rebuild() }
+      return ok
     },
 
     setRadius (m) { this.radiusMeters = m; this._savePrefs(); this.discoverNow() },
@@ -216,9 +225,8 @@ export const useFeed = defineStore('feed', {
       })))
       const ranked = rankFeed(items, this.preset, now)
       // mis ecos vivos van arriba como "tuyos", fuera del ranking
-      const myName = getMyName()
       this.feed = [
-        ...mine.sort((a, b) => b.createdAt - a.createdAt).map((eco) => ({ eco, ctx: { mine: true, name: myName }, score: Infinity })),
+        ...mine.sort((a, b) => b.createdAt - a.createdAt).map((eco) => ({ eco, ctx: { mine: true, name: this.myName }, score: Infinity })),
         ...ranked
       ]
     },

@@ -19,10 +19,21 @@ a { color: var(--teal2); }
 
 .topbar {
   position: sticky; top: 0; z-index: 20;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
   background: linear-gradient(180deg, var(--bg2), rgba(16,35,40,0.92));
   border-bottom: 1px solid var(--line); backdrop-filter: blur(6px);
+}
+.topbar-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.brand { min-width: 0; }
+.brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* En móvil los controles bajan a su propia fila, debajo de la marca. */
+@media (max-width: 560px) {
+  .topbar { gap: 8px; }
+  .topbar .spacer { display: none; }
+  .topbar-controls { width: 100%; justify-content: flex-start; }
+  .top-select { max-width: none; flex: 1 1 auto; }
 }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 19px; }
 .brand img { width: 28px; height: 28px; }
