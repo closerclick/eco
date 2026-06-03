@@ -165,6 +165,7 @@ export const useFeed = defineStore('feed', {
         const eco = {
           id: uuidv4(),
           author: this.myPubkey,
+          authorName: this.myName,   // self-nick: viaja firmado con el eco
           text: body,
           links: extractLinks(body),
           tags: extractTags(body),
@@ -175,11 +176,11 @@ export const useFeed = defineStore('feed', {
         }
         const target = context?.target
         if (context?.mode === 'reply' && target) {
-          eco.replyTo = { author: target.author, id: target.id, name: await nameOf(target.author) }
+          eco.replyTo = { author: target.author, id: target.id, name: await nameOf(target.author), authorName: target.authorName }
         } else if (context?.mode === 'reeco' && target) {
           eco.repostOf = { author: target.author, id: target.id }
           eco.quoted = { // copia interna del original para mostrarlo citado
-            author: target.author, name: await nameOf(target.author),
+            author: target.author, name: await nameOf(target.author), authorName: target.authorName,
             text: target.text, links: target.links || [], tags: target.tags || [], createdAt: target.createdAt
           }
         }
@@ -382,7 +383,7 @@ function extractTags (text) {
 // Serialización canónica mínima para firmar (orden estable de claves de contenido).
 function canonical (eco) {
   return JSON.stringify({
-    id: eco.id, author: eco.author, text: eco.text, links: eco.links,
+    id: eco.id, author: eco.author, authorName: eco.authorName, text: eco.text, links: eco.links,
     tags: eco.tags, createdAt: eco.createdAt, repostOf: eco.repostOf, replyTo: eco.replyTo, quoted: eco.quoted
   })
 }

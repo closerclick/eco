@@ -148,8 +148,8 @@ async function doPublish () {
   const eco = await feed.publish({ text: text.value, context })
   if (eco) { text.value = ''; composeCtx.value = null }
 }
-function startCompose (mode, eco) {
-  composeCtx.value = { mode, eco }
+function startCompose (mode, eco, label) {
+  composeCtx.value = { mode, eco, label }
   window.scrollTo({ top: 0, behavior: 'smooth' })
   setTimeout(() => composerEl.value?.focus(), 120)
 }
@@ -185,6 +185,7 @@ const profile = computed(() => {
   return {
     pk,
     name: ctx.name || null,
+    self: entries[0]?.eco.authorName || null,
     isMe: pk === feed.myPubkey,
     reputation: ctx.reputation ?? 0,
     affinity: ctx.affinity ?? 0,
@@ -208,6 +209,12 @@ async function copyShare (eco) {
 function isExpired (eco) { return (eco.expiresAt || (eco.createdAt + 86400000)) <= now.value }
 
 const shortPk = (pk) => pk ? pk.replace(/[^a-zA-Z0-9]/g, '').slice(-6) : '??????'
+// Nombre a mostrar: MI etiqueta primero; si difiere de cómo SE identifica, su
+// self-nick entre paréntesis. Sin etiqueta mía → su self-nick → pubkey corto.
+function displayName (author, myLabel, self) {
+  if (myLabel && self && self !== myLabel) return `${myLabel} (${self})`
+  return myLabel || self || shortPk(author)
+}
 function ttlText (eco) {
   const exp = eco.expiresAt || (eco.createdAt + 86400000)
   const ms = exp - now.value
@@ -267,7 +274,7 @@ function ttlText (eco) {
       <div v-if="composeCtx" class="compose-ctx">
         <div class="compose-ctx-head">
           <span>{{ composeCtx.mode === 'reply' ? '↳ ' + t.replyingTo : '🔁 ' + t.reecoOf }}
-            <span class="pk">@{{ composeCtx.eco.author === feed.myPubkey ? t.you : shortPk(composeCtx.eco.author) }}</span></span>
+            <span class="pk">@{{ composeCtx.eco.author === feed.myPubkey ? t.you : displayName(composeCtx.eco.author, composeCtx.label, composeCtx.eco.authorName) }}</span></span>
           <button class="ctx-x" @click="cancelCompose">✕</button>
         </div>
         <blockquote class="quoted">
@@ -295,15 +302,15 @@ function ttlText (eco) {
     <div v-if="!visibleFeed.length" class="empty">{{ t.empty }}</div>
 
     <article v-for="item in visibleFeed" :key="item.eco.id" class="eco" :class="{ mine: item.ctx.mine }">
-      <div class="reply-to" v-if="item.eco.replyTo">↳ {{ t.replyingTo }} <span class="pk">@{{ item.eco.replyTo.name || shortPk(item.eco.replyTo.author) }}</span></div>
-      <div class="reply-to" v-else-if="item.eco.repostOf">🔁 {{ t.repostOf }} <span class="pk">@{{ item.eco.quoted?.name || shortPk(item.eco.repostOf.author) }}</span></div>
+      <div class="reply-to" v-if="item.eco.replyTo">↳ {{ t.replyingTo }} <span class="pk pk-link" @click="openProfile(item.eco.replyTo.author)">@{{ displayName(item.eco.replyTo.author, item.eco.replyTo.name, item.eco.replyTo.authorName) }}</span></div>
+      <div class="reply-to" v-else-if="item.eco.repostOf">🔁 {{ t.repostOf }} <span class="pk pk-link" @click="openProfile(item.eco.repostOf.author)">@{{ displayName(item.eco.repostOf.author, item.eco.quoted?.name, item.eco.quoted?.authorName) }}</span></div>
       <div class="eco-head">
-        <span class="pk pk-link" @click="openProfile(item.eco.author)">{{ item.ctx.name ? '@' + item.ctx.name : '@' + shortPk(item.eco.author) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
+        <span class="pk pk-link" @click="openProfile(item.eco.author)">@{{ displayName(item.eco.author, item.ctx.name, item.eco.authorName) }}<small v-if="item.ctx.mine"> · {{ t.you }}</small></span>
         <span class="ttl">{{ t.expires }} {{ ttlText(item.eco) }}</span>
       </div>
       <div class="eco-body" v-if="item.eco.text">{{ item.eco.text }}</div>
       <blockquote class="quoted" v-if="item.eco.quoted">
-        <span class="pk">@{{ item.eco.quoted.name || shortPk(item.eco.quoted.author) }}</span>
+        <span class="pk pk-link" @click="openProfile(item.eco.quoted.author)">@{{ displayName(item.eco.quoted.author, item.eco.quoted.name, item.eco.quoted.authorName) }}</span>
         <p>{{ item.eco.quoted.text }}</p>
       </blockquote>
       <div class="eco-links" v-if="item.eco.links && item.eco.links.length">
@@ -313,16 +320,16 @@ function ttlText (eco) {
         <span class="tag" v-for="tg in item.eco.tags" :key="tg">#{{ tg }}</span>
       </div>
       <div class="eco-foot" v-if="!item.ctx.mine">
-        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco))">💬</button>
-        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco))">🔁</button>
+        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco, item.ctx.name))">💬</button>
+        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco, item.ctx.name))">🔁</button>
         <button :title="t.like" :class="{ liked: item.ctx.reaction === 'like' }" @click="withNick(() => feed.react(item.eco, 'like'))">👍</button>
         <button :title="t.dislike" :class="{ disliked: item.ctx.reaction === 'dislike' }" @click="withNick(() => feed.react(item.eco, 'dislike'))">👎</button>
         <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
         <span v-if="item.ctx.keep && isExpired(item.eco)" class="kept-tag" :title="t.kept">📌</span>
       </div>
       <div class="eco-foot" v-else>
-        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco))">💬</button>
-        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco))">🔁</button>
+        <button :title="t.reply" @click="withNick(() => startCompose('reply', item.eco, item.ctx.name))">💬</button>
+        <button :title="t.repost" @click="withNick(() => startCompose('reeco', item.eco, item.ctx.name))">🔁</button>
         <button :title="t.share" @click="withNick(() => doShare(item.eco))">🔗</button>
         <button :title="t.del" @click="withNick(() => feed.deleteMine(item.eco))">🗑</button>
       </div>
@@ -333,7 +340,7 @@ function ttlText (eco) {
   <div v-if="profilePk && profile" class="modal-back" @click.self="profilePk = null">
     <div class="modal">
       <div class="modal-head">
-        <h3>@{{ profile.name || shortPk(profile.pk) }}<small v-if="profile.isMe"> · {{ t.you2 }}</small></h3>
+        <h3>@{{ displayName(profile.pk, profile.name, profile.self) }}<small v-if="profile.isMe"> · {{ t.you2 }}</small></h3>
         <button class="btn ghost" @click="profilePk = null">{{ t.close }}</button>
       </div>
       <p class="muted" style="font-family:ui-monospace,monospace;word-break:break-all">{{ shortPk(profile.pk) }}</p>
