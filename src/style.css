@@ -25,6 +25,8 @@ a { color: var(--teal2); }
   border-bottom: 1px solid var(--line); backdrop-filter: blur(6px);
 }
 .topbar-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+/* Chevron de volver (Web Component @closerclick/closer-click-nav) arriba-izquierda. */
+.cc-back { color: var(--text); --cc-back-size: 36px; --cc-back-bg-hover: rgba(255,255,255,.10); margin-left: -4px; }
 .brand { min-width: 0; }
 .brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

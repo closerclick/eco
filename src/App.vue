@@ -4,6 +4,7 @@ import { useFeed } from './feed/feedStore'
 import { createVaultProfileProvider } from '@closerclick/closer-click-profile'
 import { getIdentity } from './services/identity'
 import { getReputation } from './services/reputation'
+import { useBackLayer } from '@closerclick/closer-click-nav/vue'
 import iconUrl from '/icon.svg'
 
 const feed = useFeed()
@@ -254,6 +255,16 @@ const threadRoot = ref(null)
 const replyCountOf = (id) => feed.allEcos.filter((e) => e.replyTo?.id === id).length
 function openThread (eco) { threadRoot.value = eco }
 
+// Volver unificado: cada modal abierto pasa a ser una "capa". El botón físico
+// de volver / gesto de iOS / atrás del navegador / chevron del header la cierra
+// (en vez de salir de la app) gracias a @closerclick/closer-click-nav.
+useBackLayer(showNotifs)
+useBackLayer(showThemes)
+useBackLayer(nickPrompt)
+useBackLayer(threadRoot, { onClose: () => { threadRoot.value = null } })
+useBackLayer(profilePk, { onClose: () => { profilePk.value = null } })
+useBackLayer(shareCtx, { onClose: () => { shareCtx.value = null } })
+
 // Notificaciones
 function openNotifs () { showNotifs.value = true; setTimeout(() => feed.markNotifsRead(), 800) }
 function openNotif (n) {
@@ -322,6 +333,7 @@ function ttlText (eco) {
 
 <template>
   <div class="topbar">
+    <closer-click-back :lang="lang" class="cc-back"></closer-click-back>
     <div class="brand">
       <img :src="iconUrl" alt="Eco" />
       <span>Eco <small>{{ t.tagline }}</small></span>
