@@ -53,7 +53,7 @@ self.addEventListener('push', (e) => {
     for (const c of cs) { try { c.postMessage({ type: 'cc-push-ring' }) } catch (_) {} }
     const visible = cs.some((c) => c.visibilityState === 'visible')
     if (visible) return
-    let title = 'Eco', body = 'Tenés actividad nueva'
+    let title = 'Eco', body = 'Tienes actividad nueva'
     try { const d = e.data && e.data.json(); if (d) { title = d.title || title; body = d.body || body } } catch (_) {}
     await self.registration.showNotification(title, { body, icon: './icon-192.png', badge: './icon-192.png', tag: 'eco-activity' })
   })())
