@@ -6,7 +6,8 @@ import {
   initIdentity, getMyPubkey, isReady, isContact, affinityOf, signData, nameOf, getMyName, setMyName
 } from '../services/identity'
 import { publishEco, removeEco, discover } from '../services/geo'
-import { connect as proxyConnect, onMessage, sendEcoEvent, enablePush } from '../services/proxy'
+import { connect as proxyConnect, onMessage, sendEcoEvent } from '../services/proxy'
+import { shouldNotifyType, ensurePushSubscribed } from '../services/notifications'
 import {
   saveEco, saveMine, loadAllEcos, pushInbox, loadInbox, clearInbox, muteAuthor
 } from '../services/store'
@@ -36,7 +37,6 @@ export const useFeed = defineStore('feed', {
     myReaction: {},           // ecoId → 'like' | 'dislike' (persistente, para el highlight)
     muted: {},                // authorPk → true (mute personal persistente)
     notifications: [],        // respuestas/re-ecos a MIS ecos (persistente)
-    notifPermission: 'default',
     busy: false,
     locating: false,
     _poll: null,
@@ -67,10 +67,8 @@ export const useFeed = defineStore('feed', {
       if (!this.standalone) {
         await proxyConnect()
         this._off = onMessage((m) => this._onProxy(m))
-        if (typeof Notification !== 'undefined') {
-          this.notifPermission = Notification.permission
-          if (Notification.permission === 'granted') enablePush().catch(() => {})
-        }
+        // Re-registra la push subscription si el usuario optó (paquete compartido).
+        ensurePushSubscribed().catch(() => {})
       }
       await this.rebuild()   // muestra el archivo local enseguida
       this.ready = true
@@ -331,6 +329,7 @@ export const useFeed = defineStore('feed', {
     },
 
     _notify (n) {
+      if (!shouldNotifyType(n.type)) return   // pref por tipo (paquete compartido)
       const id = (n.ecoId || n.refId || '') + ':' + n.type
       if (this.notifications.some((x) => x.id === id)) return
       this.notifications = [{ ...n, id, ts: Date.now(), read: false }, ...this.notifications].slice(0, 50)
@@ -338,19 +337,6 @@ export const useFeed = defineStore('feed', {
     },
     markNotifsRead () { this.notifications = this.notifications.map((n) => ({ ...n, read: true })); this._savePrefs() },
     clearNotifs () { this.notifications = []; this._savePrefs() },
-
-    // Activar push del sistema (proxy): pide permiso y registra la subscription.
-    async enableNotifications () {
-      try {
-        if (typeof Notification === 'undefined') return false
-        let perm = Notification.permission
-        if (perm === 'default') perm = await Notification.requestPermission()
-        this.notifPermission = perm
-        if (perm !== 'granted') return false
-        await enablePush()
-        return true
-      } catch (e) { console.warn('[notif] enablePush falló', e.message); return false }
-    },
 
     async acceptInbox () {
       // aceptar la bandeja entera: ya están guardados; sólo limpiamos el flag

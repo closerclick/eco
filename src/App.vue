@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { useFeed } from './feed/feedStore'
 import { createVaultProfileProvider } from '@closerclick/closer-click-profile'
+import '@closerclick/closer-click-notifications'
+import { getNotifications } from './services/notifications'
 import { getIdentity } from './services/identity'
 import { getReputation } from './services/reputation'
 import { useBackLayer } from '@closerclick/closer-click-nav/vue'
@@ -38,7 +40,7 @@ const T = {
     replies: 'respuestas', thread: 'Conversación',
     notifications: 'Notificaciones', noNotifs: 'Sin notificaciones todavía.',
     notifReply: 'respondió a tu eco', notifRepost: 're-ecó tu eco',
-    enableNotifs: 'Activar notificaciones del sistema', notifsOn: 'Notificaciones del sistema activadas', clearN: 'Limpiar',
+    clearN: 'Limpiar',
     you: 'tú', install: 'Instalar',
     repostOf: 're-eco de', expires: 'expira en', empty: 'Todavía no hay ecos en tu zona. Publica el primero o amplía el alcance.',
     standalone: 'Vault no disponible: modo archivo local (solo lectura).',
@@ -67,7 +69,7 @@ const T = {
     replies: 'replies', thread: 'Thread',
     notifications: 'Notifications', noNotifs: 'No notifications yet.',
     notifReply: 'replied to your eco', notifRepost: 're-echoed your eco',
-    enableNotifs: 'Enable system notifications', notifsOn: 'System notifications on', clearN: 'Clear',
+    clearN: 'Clear',
     you: 'you', install: 'Install',
     repostOf: 're-echo of', expires: 'expires in', empty: 'No ecos in your radius yet. Post the first or widen the radius.',
     standalone: 'Vault unavailable: local-archive mode (read only).',
@@ -285,7 +287,14 @@ function openNotif (n) {
   showNotifs.value = false
   openThreadById(n.refId)   // refId = mi eco original → abre el hilo con la respuesta
 }
-async function enableNotifs () { await feed.enableNotifications() }
+// Panel de notificaciones = Web Component compartido <closer-click-notifications>.
+const bindNotif = (el) => { if (el) el.controller = getNotifications() }
+const ccnTheme = {
+  '--ccn-bg': 'var(--card)', '--ccn-bg-2': 'var(--bg2)', '--ccn-bg-3': 'var(--bg2)',
+  '--ccn-bg-4': 'var(--line)', '--ccn-border': 'var(--line)', '--ccn-text': 'var(--text)',
+  '--ccn-muted': 'var(--muted)', '--ccn-accent': 'var(--teal)', '--ccn-accent-text': '#04211f',
+  '--ccn-radius': '12px', 'margin-bottom': '10px', display: 'block',
+}
 function openThreadById (id) {
   const e = feed.allEcos.find((x) => x.id === id)
   threadRoot.value = e || null
@@ -470,8 +479,7 @@ function ttlText (eco) {
         <h3>🔔 {{ t.notifications }}</h3>
         <button class="btn ghost" @click="showNotifs = false">{{ t.close }}</button>
       </div>
-      <button v-if="feed.notifPermission !== 'granted'" class="btn ghost" style="margin-bottom:10px" @click="enableNotifs">{{ t.enableNotifs }}</button>
-      <p v-else class="muted" style="margin:0 0 10px">✓ {{ t.notifsOn }}</p>
+      <closer-click-notifications :ref="bindNotif" :style="ccnTheme" :lang="lang"></closer-click-notifications>
       <div v-if="!feed.notifications.length" class="muted">{{ t.noNotifs }}</div>
       <div v-for="n in feed.notifications" :key="n.id" class="notif-item" :class="{ unread: !n.read }" @click="openNotif(n)">
         <div class="notif-line">
