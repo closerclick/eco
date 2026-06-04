@@ -230,6 +230,19 @@ function bindProfile (el) {
   if (!el) return
   ensureProfileProvider().then((p) => { if (p) el.provider = p })
 }
+// "Mi perfil": botón del header (a la izquierda de la moneda de soporte) que abre
+// el MISMO Web Component compartido en modo self con mi identidad del vault.
+const myProfilePk = ref(null)
+const myProfileName = ref(null)
+async function openMyProfile () {
+  try {
+    const identity = await getIdentity()
+    const pk = identity?.me?.publickey
+    if (!pk) return
+    myProfileName.value = identity?.me?.nickname || null
+    myProfilePk.value = pk
+  } catch (_) { /* sin identidad no abre */ }
+}
 const profileTheme = {
   '--ccp-bg': 'var(--card)',
   '--ccp-bg-2': 'var(--bg2)',
@@ -263,6 +276,7 @@ useBackLayer(showThemes)
 useBackLayer(nickPrompt)
 useBackLayer(threadRoot, { onClose: () => { threadRoot.value = null } })
 useBackLayer(profilePk, { onClose: () => { profilePk.value = null } })
+useBackLayer(myProfilePk, { onClose: () => { myProfilePk.value = null } })
 useBackLayer(shareCtx, { onClose: () => { shareCtx.value = null } })
 
 // Notificaciones
@@ -355,6 +369,11 @@ function ttlText (eco) {
       <button :class="{ on: lang === 'es' }" @click="setLang('es')">ES</button>
       <button :class="{ on: lang === 'en' }" @click="setLang('en')">EN</button>
     </div>
+    <button class="profile-btn" data-testid="my-profile" @click="openMyProfile" :title="lang === 'es' ? 'Mi perfil' : 'My profile'" :aria-label="lang === 'es' ? 'Mi perfil' : 'My profile'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" />
+      </svg>
+    </button>
     <closer-click-support
       class="topbar-coin"
       href="https://ko-fi.com/closerclick"
@@ -517,6 +536,20 @@ function ttlText (eco) {
       </article>
     </div>
   </div>
+
+  <!-- Mi perfil (botón del header, a la izquierda de la moneda): mismo Web
+       Component compartido en modo self con mi identidad del vault. -->
+  <closer-click-profile
+    v-if="myProfilePk"
+    :ref="bindProfile"
+    modal
+    mode="self"
+    :pubkey="myProfilePk"
+    :name="myProfileName"
+    :lang="lang"
+    :style="profileTheme"
+    @cc-profile-close="myProfilePk = null"
+  ></closer-click-profile>
 
   <!-- Compartir: modal coherente con el set de support (WhatsApp/X/Facebook) -->
   <div v-if="shareCtx" class="modal-back" @click.self="shareCtx = null">

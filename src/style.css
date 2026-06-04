@@ -81,6 +81,15 @@ a { color: var(--teal2); }
 }
 .chip.on { color: var(--text); border-color: var(--teal); background: #123036; }
 .chip:hover { color: var(--text); }
+/* "Mi perfil": botón circular ghost a la izquierda de la moneda de soporte. */
+.profile-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; flex-shrink: 0;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted);
+  border-radius: 50%; cursor: pointer; transition: .15s;
+}
+.profile-btn svg { width: 18px; height: 18px; display: block; }
+.profile-btn:hover { color: var(--text); border-color: var(--teal); }
 .muted { color: var(--muted); font-size: 13px; }
 
 .search-box {
