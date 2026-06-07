@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import '@closerclick/closer-click-support'
 import '@closerclick/closer-click-profile'
+import '@closerclick/closer-click-install'
 import { createBackNav } from '@closerclick/closer-click-nav'
 import './style.css'
 

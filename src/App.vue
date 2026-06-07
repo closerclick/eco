@@ -90,7 +90,6 @@ const newInterest = ref('')
 const showThemes = ref(false)
 const showNotifs = ref(false)
 const now = ref(Date.now())
-const installEvt = ref(null)
 const nickPrompt = ref(false)
 const nickDraft = ref('')
 let pendingAction = null
@@ -131,20 +130,9 @@ function addInterest () {
   if (v) { feed.addInterest(v); newInterest.value = '' }
 }
 
-function onBIP (e) { e.preventDefault(); installEvt.value = e }
-function onInstalled () { installEvt.value = null }
-async function doInstall () {
-  if (!installEvt.value) return
-  installEvt.value.prompt()
-  await installEvt.value.userChoice
-  installEvt.value = null
-}
-
 function onSWMessage (e) { if (e.data?.type === 'cc-push-ring') feed.discoverNow?.() }
 
 onMounted(async () => {
-  window.addEventListener('beforeinstallprompt', onBIP)
-  window.addEventListener('appinstalled', onInstalled)
   navigator.serviceWorker?.addEventListener('message', onSWMessage)
   await feed.init()
   // Sin nick: abrir el popup de nombre directo (si cancela, el guard lo reabre
@@ -154,8 +142,6 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   clearInterval(tick); feed.dispose()
-  window.removeEventListener('beforeinstallprompt', onBIP)
-  window.removeEventListener('appinstalled', onInstalled)
 })
 
 // Re-eco puede ir sin texto (cita sola); reply/eco normal requieren texto.
@@ -363,7 +349,7 @@ function ttlText (eco) {
     </div>
     <div class="spacer"></div>
     <div class="topbar-controls">
-    <button v-if="installEvt" class="install-btn" @click="doInstall">⤓ {{ t.install }}</button>
+    <closer-click-install class="cc-install" :lang="lang" data-testid="install-btn"></closer-click-install>
     <select class="top-select" :value="feed.radiusMeters"
             @change="feed.setRadius(Number($event.target.value))" :title="t.radius">
       <option v-for="r in feed.radii" :key="r" :value="r">◎ {{ radiusLabel(r) }}</option>

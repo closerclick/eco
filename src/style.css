@@ -67,9 +67,19 @@ a { color: var(--teal2); }
 .notif-preview { font-size: 13px; color: var(--muted); margin-top: 3px; white-space: pre-wrap; word-break: break-word;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-.install-btn {
-  background: var(--teal); color: #042024; border: none; border-radius: 999px;
-  padding: 6px 12px; font-size: 13px; font-weight: 700; white-space: nowrap;
+.cc-install {
+  flex-shrink: 0;
+  --cc-install-color: #042024;
+  --cc-install-bg: var(--teal);
+  --cc-install-bg-hover: var(--teal2);
+  --cc-install-radius: 999px;
+  --cc-install-gap: 6px;
+  --cc-install-icon: 15px;
+  --cc-install-font-size: 13px;
+  --cc-install-accent: var(--teal);
+}
+.cc-install::part(button) {
+  padding: 6px 12px; font-weight: 700; white-space: nowrap; border: none;
 }
 
 .wrap { max-width: 620px; margin: 0 auto; padding: 14px; }
